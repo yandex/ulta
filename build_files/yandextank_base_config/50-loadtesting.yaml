@@ -1,0 +1,10 @@
+rcheck:
+  mem_limit: 1024
+phantom:
+  enabled: false
+  cache_dir: /dev/null
+telegraf:
+  disguise_hostnames: false
+  enabled: false
+console:
+  enabled: false

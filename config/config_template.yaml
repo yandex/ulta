@@ -1,0 +1,4 @@
+folder_id: 'my_folder_id'
+private_key: '/run/sa_key.json'
+agent_name: 'my_persistent_agent'
+

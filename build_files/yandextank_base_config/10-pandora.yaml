@@ -1,0 +1,5 @@
+pandora:
+  package: yandextank.plugins.Pandora
+  enabled: false
+  pandora_cmd: /usr/local/bin/pandora
+  expvar: false

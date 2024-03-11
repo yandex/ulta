@@ -1,0 +1,27 @@
+transport_factory: 'yc'
+load_testing_url: 'loadtesting.somewhere.com:3320'
+logging_url: 'logging-ingester.ddd'
+iam_token_service_url: 'iam.domain.huh'
+object_storage_url: 's3.amazon.maybe'
+agent_id_file: 'path/to/agent_id_file'
+client_workdir: '~/.ulta'
+lock_dir: '/var/locks/dirs'
+logging_level: 'VERYCUSTOM'
+logging_path: '/var/logs/superlogs'
+request_frequency: 16
+agent_name: 'ulta-agent'
+folder_id: 'yc_folder_155'
+service_account_id: 'asdfg'
+key_id: 'hkjl'
+private_key: 'mnopq'
+private_key_payload: 'rst'
+yc_iam_token: unique-auth-token
+oauth_token: the_token_oauth
+environment: CUSTOM_ENV
+netort_resource_manager: 'netortoverride'
+labels:
+  l1: v1
+  purpose: test
+plugins:
+  - ulta.yc
+  - my_custom_plugin.package
