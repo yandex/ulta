@@ -114,6 +114,7 @@ class TankClient:
                 files=files,
                 run_shooting_event=self._tank_worker_start_shooting_event,
                 resource_manager=self._resource_manager_factory() if self._resource_manager_factory else None,
+                plugins_implicit_enabling=True,
             )
             self.tank_worker.collect_files()
             self.tank_worker.go_to_test_folder()
