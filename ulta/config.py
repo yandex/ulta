@@ -1,7 +1,8 @@
 import os
 import yaml
 from collections import defaultdict
-from typing import Tuple, Dict, List, Any, Type
+from tabulate import tabulate
+from typing import Any
 from pathlib import Path
 from contextlib import contextmanager
 from ulta.cli_args import CliArgs, Command, parse_str_as_key_values, parse_str_as_list_values, parse_cli_args
@@ -22,7 +23,7 @@ CONFIG_PATHS = [
 
 class _ConfigBuilder:
     class _ConfigProxy(UltaConfig):
-        def __init__(self, source: str, history: Dict[str, list], config: Dict, modified_only: bool = False):
+        def __init__(self, source: str, history: dict[str, list], config: dict, modified_only: bool = False):
             self._history = history
             self._config = config
             self._current_source = source
@@ -63,11 +64,11 @@ class _ConfigBuilder:
         yield _ConfigBuilder._ConfigProxy(source, self._history, self.config, modified_only=modified_only)
 
     def explain(self) -> str:
-        explanation = ['\n']
+        explanation = []
         for name, history in self._history.items():
-            line = '\t'.join([name] + [f'<- "{h_item[1]}" [{h_item[0]}]' for h_item in history])
+            line = [name] + [f'<- "{h_item[1]}" [{h_item[0]}]' for h_item in history]
             explanation.append(line)
-        return '\n'.join(explanation)
+        return '\n' + tabulate(explanation)
 
     def default_config(self):
         with self.next_source('default') as config:
@@ -113,10 +114,9 @@ class _ConfigBuilder:
             config.service_account_key_id = content.get('key_id')
             config.service_account_key_path = content.get('private_key')
             config.service_account_private_key = content.get('private_key_payload')
-            config.iam_token = content.get('yc_iam_token')
-            config.oauth_token = content.get('oauth_token')
             config.labels = content.get('labels')
             config.plugins = content.get('plugins')
+            config.no_cache = content.get('no_cache')
 
     def load_env_config(self):
         with self.next_source('env') as config:
@@ -157,10 +157,16 @@ class _ConfigBuilder:
             config.command = args.command
             if config.command in ['', None]:
                 config.command = Command.SERVE
+            config.backend_service_url = args.backend_service_url
+            config.iam_service_url = args.iam_service_url
+            config.logging_service_url = args.logging_service_url
+            config.object_storage_url = args.object_storage_url
             config.agent_name = args.agent_name
+            config.agent_id_file = args.agent_id_file
             config.folder_id = args.folder_id
             config.environment = args.environment
             config.transport = args.transport
+            config.service_account_id = args.service_account_id
             config.service_account_key_path = args.service_account_key_path
             config.logging_path = args.log_path
             config.logging_level = args.log_level
@@ -168,6 +174,8 @@ class _ConfigBuilder:
             config.work_dir = args.work_dir
             config.lock_dir = args.lock_dir
             config.labels = args.labels
+            config.netort_resource_manager = args.netort_resource_manager
+            config.plugins = args.plugins
 
             if args.no_cache:
                 config.no_cache = args.no_cache
@@ -184,7 +192,7 @@ class _ConfigBuilder:
         return UltaConfig(**self.config)
 
 
-def configure() -> Tuple[UltaConfig, str]:
+def configure() -> tuple[UltaConfig, str]:
     args = parse_cli_args()
 
     builder = _ConfigBuilder()
@@ -207,7 +215,10 @@ def configure() -> Tuple[UltaConfig, str]:
     return builder.build(), builder.explain()
 
 
-def get_config_file_path(args: CliArgs = None) -> str:
+def get_config_file_path(args: CliArgs | None = None) -> str:
+    if not args:
+        args = CliArgs()
+
     if args.config_file_path:
         return args.config_file_path
 
@@ -221,5 +232,5 @@ def get_config_file_path(args: CliArgs = None) -> str:
     return ''
 
 
-def detect_env_config_plugins() -> List[Type[ExternalConfigLoader]]:
+def detect_env_config_plugins() -> list[type[ExternalConfigLoader]]:
     return ExternalConfigLoader.__subclasses__()

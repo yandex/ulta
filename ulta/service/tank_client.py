@@ -5,7 +5,7 @@ import logging
 import yaml
 from enum import IntEnum
 from pathlib import Path
-from typing import Tuple, Iterable, Protocol, Callable
+from typing import Iterable, Protocol, Callable
 
 from yandextank.common.interfaces import AbstractCriterion
 from yandextank.common.util import Status
@@ -43,7 +43,7 @@ class TankStatus(IntEnum):
 
 class TankStatusProvider(Protocol):
     def get_tank_status(self) -> TankStatus:
-        pass
+        ...
 
 
 class TankClient:
@@ -226,7 +226,7 @@ class TankClient:
             )
 
     @staticmethod
-    def extract_error(job_status_json: dict) -> Tuple[str, str]:
+    def extract_error(job_status_json: dict) -> tuple[str, str | None]:
         error = job_status_json.get('error', '')
         error_type = None
         exit_code = job_status_json.get('exit_code')

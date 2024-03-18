@@ -7,7 +7,6 @@ from google.api_core.exceptions import (
     Unauthorized,
     Unauthenticated,
 )
-from typing import Optional
 from ulta.common.cancellation import Cancellation, CancellationType
 from ulta.common.interfaces import TankStatusClient
 from ulta.service.tank_client import TankStatusProvider, TankStatus
@@ -28,7 +27,7 @@ class StatusReporter:
         self.report_delay = max(1, report_delay)
         self.cancellation = cancellation
 
-    def report_tank_status(self, status: Optional[TankStatus] = None):
+    def report_tank_status(self, status: TankStatus | None = None):
         status = status or self.tank_client.get_tank_status()
         self.loadtesting_client.claim_tank_status(status.name)
 

@@ -131,8 +131,9 @@ def test_load_file_config():
             'command',
             'compute_instance_id',
             'instance_lt_created',
-            'no_cache',
             'test_id',
+            'iam_token',
+            'oauth_token',
         ],
     )
 
@@ -143,6 +144,7 @@ def test_load_args_config():
     builder.load_args_config(
         CliArgs(
             agent_name='ulta-agent',
+            agent_id_file='path/to/agent_id_file',
             command='GO',
             environment='CUSTOM_ENV',
             folder_id='yc_folder_155',
@@ -150,11 +152,18 @@ def test_load_args_config():
             log_level='VERYCUSTOM',
             log_path='/var/logs/superlogs',
             no_cache=True,
+            service_account_id='asdfg',
             service_account_key_path='mnopq',
             test_id='uvwx',
             transport='yc',
             work_dir='~/.ulta',
             labels={'l1': 'v1', 'purpose': 'test'},
+            netort_resource_manager='netortoverride',
+            plugins=['ulta.yc', 'my_custom_plugin.package'],
+            backend_service_url='loadtesting.somewhere.com:3320',
+            iam_service_url='iam.domain.huh',
+            logging_service_url='logging-ingester.ddd',
+            object_storage_url='s3.amazon.maybe',
         )
     )
 
@@ -162,22 +171,14 @@ def test_load_args_config():
         builder.build(),
         EXPECTED_CONFIG,
         [
-            'agent_id_file',
             'agent_version',
-            'backend_service_url',
             'compute_instance_id',
-            'iam_service_url',
-            'iam_token',
             'instance_lt_created',
-            'logging_service_url',
-            'oauth_token',
-            'object_storage_url',
             'request_frequency',
-            'service_account_id',
             'service_account_key_id',
             'service_account_private_key',
-            'netort_resource_manager',
-            'plugins',
+            'iam_token',
+            'oauth_token',
         ],
     )
 

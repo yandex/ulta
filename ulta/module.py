@@ -1,10 +1,9 @@
 from types import ModuleType
-from typing import Type, Union, Optional, List
 import inspect
 import importlib
 
 
-def load_plugins(plugins_list: List[str]):
+def load_plugins(plugins_list: list[str]):
     for p in plugins_list:
         if not p:
             continue
@@ -14,7 +13,7 @@ def load_plugins(plugins_list: List[str]):
             raise RuntimeError(f'Unknown package {str(p)}: ensure package exists') from e
 
 
-def load_class(module: Union[str, ModuleType], *, base_class: Optional[Type] = None, member_name: Optional[str] = None):
+def load_class(module: str | ModuleType, *, base_class: type | None = None, member_name: str | None = None):
     '''
     Lookup requested class from module.
     First try to find descendant of base_class if specified.

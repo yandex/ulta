@@ -2,7 +2,6 @@ import argparse
 import sys
 from strenum import StrEnum
 from dataclasses import dataclass
-from typing import Optional, List
 
 
 class Command(StrEnum):
@@ -13,29 +12,38 @@ class Command(StrEnum):
 
 @dataclass
 class CliArgs:
-    command: Optional[str] = None
-    config_file_path: Optional[str] = None
-    no_cache: Optional[bool] = False
-    work_dir: Optional[str] = None
-    lock_dir: Optional[str] = None
+    command: str | None = None
+    config_file_path: str | None = None
+    no_cache: bool | None = False
+    work_dir: str | None = None
+    lock_dir: str | None = None
+    plugins: list[str] | None = None
+    netort_resource_manager: str | None = None
 
-    environment: Optional[str] = None
-    transport: Optional[str] = None
-    folder_id: Optional[str] = None
-    agent_name: Optional[str] = None
-    service_account_key_path: Optional[str] = None
-    log_path: Optional[str] = None
-    log_level: Optional[str] = None
-    labels: Optional[dict] = None
+    backend_service_url: str | None = None
+    iam_service_url: str | None = None
+    logging_service_url: str | None = None
+    object_storage_url: str | None = None
 
-    test_id: Optional[str] = None
+    environment: str | None = None
+    transport: str | None = None
+    folder_id: str | None = None
+    agent_name: str | None = None
+    agent_id_file: str | None = None
+    service_account_id: str | None = None
+    service_account_key_path: str | None = None
+    log_path: str | None = None
+    log_level: str | None = None
+    labels: dict[str, str] | None = None
+
+    test_id: str | None = None
 
 
 def parse_cli_args() -> CliArgs:
     return parse_args(sys.argv[1:])
 
 
-def parse_args(args: List[str]) -> CliArgs:
+def parse_args(args: list[str]) -> CliArgs:
     parser = _create_parser()
     return CliArgs(**vars(parser.parse_args(args)))
 
@@ -58,10 +66,21 @@ def _create_parser() -> argparse.ArgumentParser:
 
     parser.add_argument('--folder-id', dest='folder_id', help='Id of folder in Yandex Cloud with Loadtesting service')
     parser.add_argument('--agent-name', dest='agent_name', help='Persistent agent unique name')
+    parser.add_argument('--agent-id-file', dest='agent_id_file', help='Path to file, where agent id should be written')
     parser.add_argument('--no-cache', dest='no_cache', action='store_true', help="Don't use cached agent id.")
     parser.add_argument('--work-dir', dest='work_dir', help="Path to ulta working directory.")
     parser.add_argument('--lock-dir', dest='lock_dir', help="Path to yandextank lock directory.")
+    parser.add_argument('--netort-rm', dest='netort_resource_manager', help='Resource manager module to use')
+    parser.add_argument('--backend-url', dest='backend_service_url', help='Loadtesting backend service URL')
+    parser.add_argument('--iam-url', dest='iam_service_url', help='IAM service URL')
+    parser.add_argument('--logging-url', dest='logging_service_url', help='Logging service URL')
+    parser.add_argument('--storage-url', dest='object_storage_url', help='Object storage URL')
 
+    parser.add_argument(
+        '--sa-id',
+        dest='service_account_id',
+        help='Id of service account in Yandex Cloud that will be used to request authentication JWT token',
+    )
     parser.add_argument(
         '--sa-key-file',
         dest='service_account_key_path',
@@ -96,6 +115,12 @@ def _create_parser() -> argparse.ArgumentParser:
         action=StoreKeyValueAction,
         help='Agent labels when run as external agent in format --labels key=value[,key=value...]',
     )
+    parser.add_argument(
+        '--plugins',
+        dest='plugins',
+        action=StoreListAction,
+        help='Which plugins to use while config building in format --plugins plugin[,plugin...]',
+    )
 
     parser.add_argument(
         'command',
@@ -128,7 +153,16 @@ class StoreKeyValueAction(argparse.Action):
         setattr(namespace, self.dest, res)
 
 
-def parse_str_as_key_values(s: Optional[str]) -> Optional[dict]:
+class StoreListAction(argparse.Action):
+    def __call__(self, parser, namespace, values: str, option_string=None):
+        try:
+            res = parse_str_as_list_values(values)
+        except ValueError as e:
+            raise argparse.ArgumentError(self, e.args[0])
+        setattr(namespace, self.dest, res)
+
+
+def parse_str_as_key_values(s: str | None) -> dict[str, str] | None:
     if s is None:
         return None
     res = {}
@@ -143,7 +177,7 @@ def parse_str_as_key_values(s: Optional[str]) -> Optional[dict]:
     return res
 
 
-def parse_str_as_list_values(s: Optional[str]) -> Optional[list]:
+def parse_str_as_list_values(s: str | None) -> list[str] | None:
     if s is None:
         return None
     res = []

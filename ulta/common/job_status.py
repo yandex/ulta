@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from strenum import StrEnum
-from typing import Optional, Union
 from yandextank.common.util import Status
 
 
@@ -24,7 +23,7 @@ class JobStatus:
     status: str
     error: str
     error_type: str
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
 
     def finished(self) -> bool:
         return self.status in FINISHED_STATUSES_TO_EXIT_CODE_MAPPING
@@ -32,10 +31,10 @@ class JobStatus:
     @classmethod
     def from_status(
         cls,
-        status: Union[str, bytes],
-        error: str = None,
-        error_type: str = None,
-        exit_code: Union[int, str, None] = None,
+        status: str | bytes,
+        error: str | None = None,
+        error_type: str | None = None,
+        exit_code: int | str | None = None,
     ):
         if isinstance(status, bytes):
             status = status.decode('utf-8')
@@ -48,7 +47,7 @@ class JobStatus:
         )
 
     @staticmethod
-    def _interpret_exit_code(exit_code: Union[int, str, None], status: str) -> Union[int, None]:
+    def _interpret_exit_code(exit_code: int | str | None, status: str) -> int | None:
         if isinstance(exit_code, int):
             return exit_code
         if isinstance(exit_code, str):

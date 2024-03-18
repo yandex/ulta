@@ -102,6 +102,7 @@ def test_get_auth_token_requester_raises_error(args):
 def test_build_sa_key(args, expected: SAKey):
     actual = build_sa_key(**args)
 
+    assert actual is not None
     assert actual.sa_id == expected.sa_id
     assert actual.key_id == expected.key_id
     assert actual.key == expected.key

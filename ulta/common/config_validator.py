@@ -1,5 +1,4 @@
 import re
-import typing
 from typing_extensions import Annotated
 from pydantic.functional_validators import AfterValidator
 
@@ -13,7 +12,7 @@ def str_len(*args):
     except StopIteration:
         pass
 
-    def validator(v: typing.Optional[str]):
+    def validator(v: str | None):
         if v is not None:
             if min_len is not None and len(v) < min_len:
                 raise AssertionError(f'{v} must be at least {min_len} chars long')
@@ -27,7 +26,7 @@ def str_len(*args):
 def re_match(pattern):
     regexp = re.compile(pattern)
 
-    def validator(v: typing.Optional[str]):
+    def validator(v: str | None):
         if v is not None and regexp.fullmatch(v) is None:
             raise AssertionError(f"{v} doesn't match pattern {pattern}")
         return v
@@ -36,7 +35,7 @@ def re_match(pattern):
 
 
 def dict_size(size: int):
-    def validator(v: typing.Optional[typing.Dict]):
+    def validator(v: dict | None):
         if v is not None and len(v) > size:
             raise AssertionError(f'may have at most {v} values')
         return v

@@ -58,7 +58,7 @@ class ImbalanceUploader(JobFinalizer):
         self.loadtesting_client = loadtesting_client
 
     def run(self) -> int:
-        autostop: ImbalanceEntry = None
+        autostop: ImbalanceEntry | None = None
         try:
             # purge queue trying to find earliest autostop
             while True:

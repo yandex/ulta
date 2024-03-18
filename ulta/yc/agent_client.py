@@ -1,5 +1,4 @@
 import grpc
-from typing import Optional
 from ulta.common.utils import catch_exceptions
 from ulta.common.interfaces import AgentClient
 from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
@@ -12,8 +11,8 @@ class YCAgentClient(AgentClient):
         agent_version: str,
         grpc_channel: grpc.Channel,
         token_provider: TokenProviderProtocol,
-        compute_instance_id: Optional[str] = None,
-        labels: Optional[dict] = None,
+        compute_instance_id: str | None = None,
+        labels: str | None = None,
     ) -> None:
         self.timeout = 30.0
         self._token_provider = token_provider

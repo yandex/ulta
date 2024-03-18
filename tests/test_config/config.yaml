@@ -11,12 +11,11 @@ logging_path: '/var/logs/superlogs'
 request_frequency: 16
 agent_name: 'ulta-agent'
 folder_id: 'yc_folder_155'
+no_cache: true
 service_account_id: 'asdfg'
 key_id: 'hkjl'
 private_key: 'mnopq'
 private_key_payload: 'rst'
-yc_iam_token: unique-auth-token
-oauth_token: the_token_oauth
 environment: CUSTOM_ENV
 netort_resource_manager: 'netortoverride'
 labels:

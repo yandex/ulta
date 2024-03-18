@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from contextlib import contextmanager
-from typing import Optional, List, Iterable
+from typing import Iterable
 
 from ulta.common.ammo import Ammo
 from ulta.common.cancellation import Cancellation, CancellationRequest
@@ -39,7 +39,7 @@ class UltaService:
         tank_client: TankClient,
         s3_client: S3Client,
         work_dir: str,
-        sleep_time: int,
+        sleep_time: float,
         artifact_uploaders: Iterable[NamedService[ArtifactUploader]],
         cancellation: Cancellation,
         max_waiting_time: int = 300,
@@ -56,14 +56,14 @@ class UltaService:
         self.job_pooling_delay = sleep_time
         self.artifact_uploaders = artifact_uploaders
         self.max_waiting_time = max_waiting_time
-        self._override_status: Optional[TankStatus] = None
+        self._override_status: TankStatus | None = None
 
     def get_tank_status(self) -> TankStatus:
         if self._override_status is not None:
             return self._override_status
         return self.tank_client.get_tank_status()
 
-    def _extract_ammo(self, job_message, test_data_dir) -> List[Ammo]:
+    def _extract_ammo(self, job_message, test_data_dir) -> list[Ammo]:
         res = []
         for payload_entry in job_message.data_payload:
             ammo_name = payload_entry.name
@@ -121,7 +121,7 @@ class UltaService:
             ),
         )
 
-    def get_job(self, job_id: Optional[str] = None) -> Optional[Job]:
+    def get_job(self, job_id: str | None = None) -> Job | None:
         try:
             job_message = self.loadtesting_client.get_job(job_id)
         except NotFound:
@@ -189,7 +189,7 @@ class UltaService:
                 time.sleep(self.sleep_time)
 
     @staticmethod
-    def _get_job_data_paths(path: str) -> List[str]:
+    def _get_job_data_paths(path: str) -> list[str]:
         if not path or not os.path.isdir(path):
             return []
         return [os.path.join(path, x) for x in os.listdir(path)]

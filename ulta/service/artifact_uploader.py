@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Generator, Tuple, Union, List, Iterable, Protocol
+from typing import Generator, Iterable, Protocol
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from ulta.common.cancellation import Cancellation, CancellationRequest, CancellationType
@@ -48,9 +48,9 @@ class S3ArtifactUploader(ArtifactUploader):
         except Exception as e:
             raise ArtifactUploadError(str(e)) from e
 
-    def _upload_artifacts(self, artifacts: Iterable[Tuple[str, str]], output_bucket: str):
+    def _upload_artifacts(self, artifacts: Iterable[tuple[str, str]], output_bucket: str):
         # TODO: make async awaiter
-        errors: List[Exception] = []
+        errors: list[Exception] = []
         for local_path, s3_filename in artifacts:
             self.cancellation.raise_on_set(CancellationType.FORCED)
             try:
@@ -74,7 +74,7 @@ class S3ArtifactUploader(ArtifactUploader):
                 self.logger.error('File %s is not readable', path)
 
     def _collect_files(
-        self, path: Path, filter_include: List[str], filter_exclude: List[str]
+        self, path: Path, filter_include: list[str], filter_exclude: list[str]
     ) -> Generator[Path, None, None]:
         if not path.is_dir():
             path = path.parent
@@ -86,9 +86,7 @@ class S3ArtifactUploader(ArtifactUploader):
             files -= {p.resolve() for p in path.rglob(filter) if p.is_file()}
         return self._filter_readable(files)
 
-    def collect_artifacts(
-        self, settings: ArtifactSettings, path: Union[str, Path]
-    ) -> Generator[Tuple[str, str], None, None]:
+    def collect_artifacts(self, settings: ArtifactSettings, path: str | Path) -> Generator[tuple[str, str], None, None]:
         root = path if isinstance(path, Path) else Path(path)
         root = root.resolve()
         collected_files = self._collect_files(root, settings.filter_include, settings.filter_exclude)
@@ -105,7 +103,7 @@ class S3ArtifactUploader(ArtifactUploader):
                 yield str(f), settings.output_name + '/' + _relative_to(f, root)
 
 
-def _relative_to(path: Union[Path, str], root: Union[Path, str]) -> str:
+def _relative_to(path: Path | str, root: Path | str) -> str:
     if os.path.commonpath((root, path)) == str(root):
         return os.path.relpath(path, root)
     else:

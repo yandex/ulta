@@ -1,7 +1,6 @@
 import grpc
 
 from pathlib import Path
-from typing import Union, Optional
 from google.api_core.exceptions import from_grpc_error
 
 
@@ -15,8 +14,8 @@ def catch_exceptions(func):
     return wrapper
 
 
-def normalize_path(path: Union[Path, str, None]) -> Optional[str]:
+def normalize_path(path: Path | str | None) -> Path | str:
     if not path:
-        return path
+        return path or ''
 
     return Path(path).expanduser().absolute().as_posix()

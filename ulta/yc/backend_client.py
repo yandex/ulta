@@ -1,6 +1,5 @@
 import grpc
 
-from typing import Optional
 from yandex.cloud.loadtesting.agent.v1 import (
     agent_service_pb2,
     agent_service_pb2_grpc,
@@ -52,7 +51,7 @@ class YCLoadtestingClient:
         return result.code
 
     @catch_exceptions
-    def get_job(self, job_id: Optional[str] = None) -> Optional[job_service_pb2.Job]:
+    def get_job(self, job_id: str | None = None) -> job_service_pb2.Job | None:
         request = job_service_pb2.GetJobRequest(agent_instance_id=self.agent_id, job_id=job_id)
 
         try:

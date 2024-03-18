@@ -7,7 +7,7 @@ import requests
 import time
 from pathlib import Path
 from requests.adapters import HTTPAdapter
-from typing import Tuple, Callable, Optional, Protocol
+from typing import Callable, Protocol
 from urllib.parse import urlparse
 from google.api_core.exceptions import Unauthenticated
 
@@ -83,12 +83,12 @@ class TokenProviderProtocol(Protocol):
     def get_token(self) -> str:
         ...
 
-    def get_auth_metadata(self) -> Tuple[str, str]:
+    def get_auth_metadata(self) -> tuple[str, str]:
         ...
 
 
 class AuthTokenProvider(TokenProviderProtocol):
-    def __init__(self, iam_endpoint: str = None, **kwargs) -> None:
+    def __init__(self, iam_endpoint: str | None = None, **kwargs) -> None:
         """There are 3 auth methods supported. It will pick one method depending on provided args:
         * iam_token: auth using this token. NOTE: after token exires, this factory is no longer able to establish connection.
                      Use only for testing purposes
@@ -152,10 +152,10 @@ class AuthTokenProvider(TokenProviderProtocol):
 
     @staticmethod
     def get_auth_token_requester(
-        iam_endpoint: str = None,
-        lazy_channel: Callable[[], grpc.Channel] = None,
+        iam_endpoint: str | None = None,
+        lazy_channel: Callable[[], grpc.Channel] | None = None,
         **kwargs,
-    ) -> Callable[[], Tuple[str, float]]:
+    ) -> Callable[[], tuple[str, float]]:
         iam_token = kwargs.get('iam_token', '')
         if iam_token:
             LOGGER.info('get_auth_token_requester: using iam_token')
@@ -200,7 +200,7 @@ class AuthTokenProvider(TokenProviderProtocol):
         )
 
 
-def get_iam_token_from_metadata() -> Tuple[str, float]:
+def get_iam_token_from_metadata() -> tuple[str, float]:
     url = COMPUTE_INSTANCE_SA_TOKEN_URL
     try:
         session = requests.Session()
@@ -220,7 +220,7 @@ def get_iam_token_from_metadata() -> Tuple[str, float]:
 
 class JwtTokenRequester(object):
     def __init__(
-        self, iam_endpoint: str, sa_key: SAKey, channel: grpc.Channel = None, audience_url: str = None
+        self, iam_endpoint: str | None, sa_key: SAKey, channel: grpc.Channel = None, audience_url: str | None = None
     ) -> None:
         self.iam_endpoint = iam_endpoint or IAM_TOKEN_SERVICE_URL
 
@@ -241,7 +241,7 @@ class JwtTokenRequester(object):
         channel = channel or create_cloud_channel(self.iam_endpoint)
         self.iam_stub = IamTokenServiceStub(channel)
 
-    def get_token(self) -> Tuple[str, float]:
+    def get_token(self) -> tuple[str, float]:
         """Get an IAM token by generating and sending a JWT token to the IAM service.
 
         Returns a tuple of (IAM token, expiry date) or raises an exception.
@@ -264,7 +264,7 @@ class JwtTokenRequester(object):
 
 
 class OauthTokenRequester(object):
-    def __init__(self, iam_endpoint: str, oauth_token: str, channel: grpc.Channel = None) -> None:
+    def __init__(self, iam_endpoint: str | None, oauth_token: str, channel: grpc.Channel = None) -> None:
         if not oauth_token:
             raise AuthError('Require not empty oAuth token.')
 
@@ -273,7 +273,7 @@ class OauthTokenRequester(object):
         channel = channel or create_cloud_channel(self.iam_endpoint)
         self.iam_stub = IamTokenServiceStub(channel)
 
-    def get_token(self) -> Tuple[str, float]:
+    def get_token(self) -> tuple[str, float]:
         """Exchange oAuth token to IAM token.
 
         Returns a tuple of (IAM token, expiry date) or raises an exception.
@@ -285,7 +285,7 @@ class OauthTokenRequester(object):
             raise AuthError("Couldn't get iam token from oAuth.") from e
 
 
-def build_sa_key(**kwargs) -> Optional[SAKey]:
+def build_sa_key(**kwargs) -> SAKey | None:
     sa_private_key = kwargs.get('sa_key', '')
     sa_id = kwargs.get('sa_id', '')
     sa_key_id = kwargs.get('sa_key_id', '')
@@ -323,7 +323,7 @@ def _load_sa_key_from_pem(file_path: str) -> SAKey:
     return SAKey(key_id='', sa_id='', key=Path(file_path).read_text())
 
 
-def _get_host_port_from_url(url: str) -> Tuple[str, str]:
+def _get_host_port_from_url(url: str) -> tuple[str, str]:
     """Parse well-formed URLs and host:port pairs as well. Doesn't support ipv6 hosts."""
     result = urlparse(url)
     if not result.netloc and not url.startswith('//'):

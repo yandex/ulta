@@ -36,7 +36,7 @@ from yandextank.common.util import Status as TankJobStatus
 FAKE_AGENT_VERSION = 'some_version'
 
 
-def ulta_service(sleep_time=1):
+def ulta_service(sleep_time: float = 1):
     agent = AgentInfo(
         id='agent_id',
         origin=AgentOrigin.COMPUTE_LT_CREATED,
@@ -283,6 +283,7 @@ def test_get_job(
     patch_tank_client_get_tank_status.return_value = tank_status
     patch_loadtesting_client_get_job.return_value = job
     res_job = ulta_service().get_job(job_id)
+    assert res_job is not None
     assert res_job.id == job.id
     assert res_job.config == json.loads(job.config)
     assert len(res_job.ammos) == 1
@@ -327,7 +328,7 @@ def test_serve_job(
     patch_loadtesting_client_get_job_signal.return_value = job_service_pb2.JobSignalResponse(
         signal=job_service_pb2.JobSignalResponse.Signal.Value('SIGNAL_UNSPECIFIED')
     )
-    job = Job(id='123', config='config', tank_job_id='123')
+    job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
     ulta_service().serve_lt_job(job)
     patch_loadtesting_client_claim_job_status.assert_called_with('123', job_status, None, None)
@@ -346,7 +347,7 @@ def test_serve_job_stop(
     patch_loadtesting_client_get_job_signal.return_value = job_service_pb2.JobSignalResponse(
         signal=job_service_pb2.JobSignalResponse.Signal.Value('STOP')
     )
-    job = Job(id='123', config='config')
+    job = Job(id='123', config={'plugin': {'enabled': True}})
     with pytest.raises(JobStoppedError):
         ulta_service().serve_lt_job(job)
 
@@ -378,7 +379,7 @@ def test_claim_job_status_on_errors(
 ):
     patch_ulta_serve_lt_job.side_effect = raise_ex
     patch_tank_client_get_job_status.return_value = JobStatus.from_status(TankJobStatus.TEST_RUNNING)
-    job = Job(id='123', config='config', tank_job_id='123')
+    job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
     job_got = ulta_service().execute_job(job)
     patch_loadtesting_client_claim_job_status.assert_called_with('123', *expected_status_args)
@@ -407,7 +408,7 @@ def test_serve_job_error(
     call_function,
     exception_to_raise,
 ):
-    job = Job(id='123', config='config')
+    job = Job(id='123', config={'plugin': {'enabled': True}})
 
     with patch.object(YCLoadtestingClient, call_function) as m:
         m.side_effect = exception_to_raise('')
@@ -467,7 +468,7 @@ def test_serve_job_sustain_non_critical_lt_errors(
     patch_tank_client_get_job_status.return_value = JobStatus.from_status(TankJobStatus.TEST_RUNNING)
     with patch.object(UltaService, mock_failure, test_scenario) as mock:
         mock.side_effect = test_scenario
-        job = Job(id='123', config='config')
+        job = Job(id='123', config={'plugin': {'enabled': True}})
         ulta_service(sleep_time=0.1).serve_lt_job(job)
 
     assert not scenario
@@ -485,7 +486,7 @@ def test_serve_job_sustain_prepare_job_error(
     check_threads_leak,
 ):
     patch_tank_client_prepare_job.side_effect = TankError()
-    job = Job(id='123', config='config', tank_job_id='123')
+    job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     ulta_service().execute_job(job)
 
     patch_loadtesting_client_claim_job_status.assert_called_with(

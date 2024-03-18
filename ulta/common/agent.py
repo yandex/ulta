@@ -10,17 +10,17 @@ class AgentOrigin(IntEnum):
 
 @dataclass
 class AgentInfo:
-    id: str
-    name: str
-    version: str
+    id: str | None
+    name: str | None
+    version: str | None
     origin: AgentOrigin
-    folder_id: str
+    folder_id: str | None
 
     def is_external(self) -> bool:
         return self.origin == AgentOrigin.EXTERNAL
 
     def is_anonymous_external_agent(self) -> bool:
-        return self.is_external() and not bool(self.name) and self.folder_id
+        return bool(self.is_external() and not self.name and self.folder_id)
 
     def is_persistent_external_agent(self) -> bool:
         return bool(self.is_external() and self.name and self.folder_id)

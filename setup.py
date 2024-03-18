@@ -30,6 +30,7 @@ analytic tools for the results they produce.
         'pydantic>=2.0.0',
         'grpcio-status',
         'strenum',
+        'tabulate',
     ],
     tests_require=['pytest==4.6.3', 'flake8', 'pytest-benchmark', 'zipp==0.5.1', 'mock'],
     license='Apache',

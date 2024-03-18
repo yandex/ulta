@@ -16,13 +16,13 @@ class LoadtestingAgentService(object):
         self,
         logger: logging.Logger,
         agent_client: AgentClient,
-        agent_origin: AgentOrigin = None,
-        agent_id: str = None,
-        agent_id_file: str = None,
-        agent_name: str = None,
-        agent_version: str = None,
-        folder_id: str = None,
-        compute_instance_id: str = None,
+        agent_origin: AgentOrigin | None = None,
+        agent_id: str | None = None,
+        agent_id_file: str | None = None,
+        agent_name: str | None = None,
+        agent_version: str | None = None,
+        folder_id: str | None = None,
+        compute_instance_id: str | None = None,
         instance_lt_created: bool = False,
         use_cached_agent_id: bool = True,
     ):
@@ -53,7 +53,7 @@ class LoadtestingAgentService(object):
             return AgentOrigin.COMPUTE_LT_CREATED
         return AgentOrigin.EXTERNAL
 
-    def _identify_agent_id(self) -> str:
+    def _identify_agent_id(self) -> str | None:
         if self.agent.origin is AgentOrigin.COMPUTE_LT_CREATED:
             agent_instance_id = self.agent_client.register_agent()
             self.logger.info('The agent has been registered with id(%s)', agent_instance_id)

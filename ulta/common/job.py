@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from strenum import StrEnum
 from functools import cached_property
-from typing import List, Optional, Iterable, Tuple
+from typing import Iterable
 
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
 from ulta.common.ammo import Ammo
@@ -29,8 +29,8 @@ class ArtifactSettings:
     output_bucket: str
     output_name: str
     is_archive: bool
-    filter_include: List[str]
-    filter_exclude: List[str]
+    filter_include: list[str]
+    filter_exclude: list[str]
 
 
 @dataclass
@@ -42,13 +42,13 @@ class JobResult:
 @dataclass
 class Job:
     id: str
-    ammos: List[Ammo] = field(default_factory=list)
-    log_group_id: Optional[str] = None
-    tank_job_id: Optional[str] = None
-    config: Optional[dict] = None
-    test_data_dir: Optional[str] = None
-    upload_artifact_settings: Optional[ArtifactSettings] = None
-    artifact_dir_path: Optional[str] = None
+    ammos: list[Ammo] = field(default_factory=list)
+    log_group_id: str | None = None
+    tank_job_id: str | None = None
+    config: dict | None = None
+    test_data_dir: str | None = None
+    upload_artifact_settings: ArtifactSettings | None = None
+    artifact_dir_path: str | None = None
     last_status: JobStatus = field(
         default_factory=lambda: JobStatus.from_status(AdditionalJobStatus.JOB_STATUS_UNSPECIFIED)
     )
@@ -69,7 +69,8 @@ class Job:
     def plugin_enabled(self, plugin_type: JobPluginType) -> bool:
         return any(self.get_plugins(plugin_type))
 
-    def get_plugins(self, plugin_type: JobPluginType) -> Iterable[Tuple[str, dict]]:
+    def get_plugins(self, plugin_type: JobPluginType) -> Iterable[tuple[str, dict]]:
+        assert self.config is not None
         return [
             (key, plugin)
             for key, plugin in self.config.items()
