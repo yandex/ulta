@@ -31,6 +31,7 @@ analytic tools for the results they produce.
         'grpcio-status',
         'strenum',
         'tabulate',
+        'tenacity',
     ],
     tests_require=['pytest>=7.4.4', 'flake8', 'pytest-benchmark', 'zipp==0.5.1', 'mock'],
     license='Apache',

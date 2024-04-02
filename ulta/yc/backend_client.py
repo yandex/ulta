@@ -14,7 +14,7 @@ from yandex.cloud.loadtesting.agent.v1 import (
 )
 
 from ulta.common.agent import AgentInfo
-from ulta.common.utils import catch_exceptions
+from ulta.common.utils import catch_exceptions, retry_lt_client_call
 from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
 from ulta.yc.trail_helper import prepare_trail_data, prepare_monitoring_data
 
@@ -35,6 +35,7 @@ class YCLoadtestingClient:
         return meta
 
     @catch_exceptions
+    @retry_lt_client_call
     def claim_tank_status(self, tank_status: str):
         # TODO return status and error message
         request = agent_service_pb2.ClaimAgentStatusRequest(agent_instance_id=self.agent_id, status=tank_status)
@@ -42,6 +43,7 @@ class YCLoadtestingClient:
         return result.code
 
     @catch_exceptions
+    @retry_lt_client_call
     def claim_job_status(self, job_id, job_status, error='', error_type=None):
         request = job_service_pb2.ClaimJobStatusRequest(job_id=job_id, status=job_status, error=error)
         metadata = []
@@ -51,6 +53,7 @@ class YCLoadtestingClient:
         return result.code
 
     @catch_exceptions
+    @retry_lt_client_call
     def get_job(self, job_id: str | None = None) -> job_service_pb2.Job | None:
         request = job_service_pb2.GetJobRequest(agent_instance_id=self.agent_id, job_id=job_id)
 
@@ -67,6 +70,7 @@ class YCLoadtestingClient:
             raise
 
     @catch_exceptions
+    @retry_lt_client_call
     def get_job_signal(self, job_id):
         request = job_service_pb2.JobSignalRequest(job_id=job_id)
         result = self.stub_job.GetSignal(
@@ -77,6 +81,7 @@ class YCLoadtestingClient:
         return result
 
     @catch_exceptions
+    @retry_lt_client_call
     def download_transient_ammo(self, job_id, ammo_name, path_to_download):
         request = job_service_pb2.GetJobTransientFile(job_id=job_id, name=ammo_name)
         result = self.stub_job.GetTransientFile(
@@ -105,6 +110,7 @@ class YCJobDataUploaderClient:
         return meta
 
     @catch_exceptions
+    @retry_lt_client_call
     def send_monitorings(self, job_id, data):
         request = monitoring_service_pb2.AddMetricRequest(
             agent_instance_id=self.agent_id, job_id=str(job_id), chunks=data
@@ -117,6 +123,7 @@ class YCJobDataUploaderClient:
         return result.code
 
     @catch_exceptions
+    @retry_lt_client_call
     def send_trails(self, job_id, trails):
         request = trail_service_pb2.CreateTrailRequest(agent_instance_id=self.agent_id, job_id=str(job_id), data=trails)
         result = self.stub_trail.Create(
@@ -127,6 +134,7 @@ class YCJobDataUploaderClient:
         return result.code
 
     @catch_exceptions
+    @retry_lt_client_call
     def set_imbalance_and_dsc(self, job_id, rps, timestamp, comment: str = ''):
         request = test_service_pb2.UpdateTestRequest(
             test_id=str(job_id),

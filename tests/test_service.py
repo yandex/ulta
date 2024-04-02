@@ -1,4 +1,7 @@
+import functools
 import json
+
+import grpc
 import pytest
 from google.api_core.exceptions import (
     ServiceUnavailable,
@@ -11,7 +14,7 @@ from google.api_core.exceptions import (
 )
 
 from pytest import mark
-from yandex.cloud.loadtesting.agent.v1 import job_service_pb2
+from yandex.cloud.loadtesting.agent.v1 import job_service_pb2, agent_service_pb2
 
 from ulta.yc.backend_client import YCLoadtestingClient, YCJobDataUploaderClient
 from ulta.service.tank_client import TankError
@@ -549,3 +552,70 @@ def test_publish_artifacts_raise_no_error(error):
     service.publish_artifacts(job)
     a1.service.publish_artifacts.assert_called()
     a2.service.publish_artifacts.assert_called()
+
+
+@mark.parametrize(
+    'test_case',
+    (
+        (
+            'stub_agent',
+            'ClaimStatus',
+            functools.partial(YCLoadtestingClient.claim_tank_status, tank_status='STATUS_UNSPECIFIED'),
+            agent_service_pb2.ClaimAgentStatusResponse(code=0),
+        ),
+        (
+            'stub_job',
+            'ClaimStatus',
+            functools.partial(YCLoadtestingClient.claim_job_status, job_id='jid', job_status=0),
+            job_service_pb2.ClaimJobStatusResponse(code=0),
+        ),
+        ('stub_job', 'Get', functools.partial(YCLoadtestingClient.get_job, job_id='jid'), job_service_pb2.Job()),
+        (
+            'stub_job',
+            'GetSignal',
+            functools.partial(YCLoadtestingClient.get_job_signal, job_id='jid'),
+            job_service_pb2.JobSignalResponse(
+                signal=job_service_pb2.JobSignalResponse.Signal.Value('SIGNAL_UNSPECIFIED')
+            ),
+        ),
+    ),
+)
+@mark.parametrize(
+    'tested_error',
+    [
+        grpc.StatusCode.UNKNOWN,
+        grpc.StatusCode.PERMISSION_DENIED,
+        grpc.StatusCode.UNAVAILABLE,
+        grpc.StatusCode.UNAUTHENTICATED,
+    ],
+)
+def test_retry_lt_errors(test_case, tested_error):
+    mocked_obj, mocked_func, tested_func, expected_result = test_case
+
+    err = grpc.RpcError()
+    err.code = lambda: tested_error
+    scenario_actions = [err] * 2 + [expected_result]
+
+    def scenario(*args, **kwargs):
+        if scenario_actions:
+            value = scenario_actions.pop(0)
+            if isinstance(value, Exception):
+                raise value
+            return value
+        raise RuntimeError()
+
+    agent = AgentInfo(
+        id='agent_id',
+        origin=AgentOrigin.COMPUTE_LT_CREATED,
+        version=FAKE_AGENT_VERSION,
+        folder_id='some_folder_id',
+        name='some_name',
+    )
+    lt_client = YCLoadtestingClient(MagicMock(), MagicMock(), agent)
+
+    with patch.object(getattr(lt_client, mocked_obj), mocked_func, scenario) as mock_func:
+        mock_func.side_effect = scenario
+        result = tested_func(lt_client)
+
+    assert result == expected_result.code if isinstance(result, int) else expected_result
+    assert not scenario_actions
