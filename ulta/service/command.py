@@ -4,7 +4,7 @@ import os
 from ulta.common.cancellation import Cancellation
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import NamedService, TransportFactory
-from ulta.service.loadtesting_agent_service import create_loadtesting_agent_service
+from ulta.service.loadtesting_agent_service import create_loadtesting_agent_service, ANONYMOUS_AGENT_ID
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.log_uploader_service import LogUploaderService
 from ulta.service.service import UltaService
@@ -18,7 +18,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
     transport_factory = TransportFactory.get(config)
     loadtesting_agent = create_loadtesting_agent_service(config, transport_factory.create_agent_client(), logger)
     agent = loadtesting_agent.register()
-    if config.agent_id_file:
+    if config.agent_id_file and loadtesting_agent.agent.id != ANONYMOUS_AGENT_ID:
         os.makedirs(os.path.dirname(config.agent_id_file), exist_ok=True)
         loadtesting_agent.store_agent_id(agent)
     loadtesting_client = transport_factory.create_loadtesting_client(agent)

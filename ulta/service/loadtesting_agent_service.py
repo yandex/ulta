@@ -80,16 +80,19 @@ class LoadtestingAgentService(object):
             return
         if not self.agent_id_file:
             raise ValueError('agent_id_file parameter must be set for store_agent_id')
-        with open(self.agent_id_file, 'w') as f:
-            f.write(agent.id)
+        try:
+            with open(self.agent_id_file, 'w') as f:
+                f.write(agent.id)
+        except Exception as e:
+            self.logger.error('Failed to save agent_id to file %s: %s', self.agent_id_file, e)
 
     def _load_agent_id(self) -> str:
         if self.agent_id_file:
             try:
                 with open(self.agent_id_file, '+r') as f:
                     return f.read(50)
-            except FileNotFoundError:
-                pass
+            except FileNotFoundError as e:
+                self.logger.error('Failed to load agent_id from file %s: %s', self.agent_id_file, e)
 
         return ''
 

@@ -31,6 +31,7 @@
   "tests/test_job_status.py":"load/projects/ulta/tests/test_job_status.py",
   "tests/test_loadtesting_agent.py":"load/projects/ulta/tests/test_loadtesting_agent.py",
   "tests/test_service.py":"load/projects/ulta/tests/test_service.py",
+  "tests/test_startup.py":"load/projects/ulta/tests/test_startup.py",
   "tests/test_status_reporter.py":"load/projects/ulta/tests/test_status_reporter.py",
   "tests/test_tank_client.py":"load/projects/ulta/tests/test_tank_client.py",
   "tests/test_yc_trail_helper.py":"load/projects/ulta/tests/test_yc_trail_helper.py",
