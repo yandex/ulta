@@ -85,13 +85,14 @@ class LoadtestingAgentService(object):
                 f.write(agent.id)
         except Exception as e:
             self.logger.error('Failed to save agent_id to file %s: %s', self.agent_id_file, e)
+            raise
 
     def _load_agent_id(self) -> str:
         if self.agent_id_file:
             try:
                 with open(self.agent_id_file, '+r') as f:
                     return f.read(50)
-            except FileNotFoundError as e:
+            except Exception as e:
                 self.logger.error('Failed to load agent_id from file %s: %s', self.agent_id_file, e)
 
         return ''

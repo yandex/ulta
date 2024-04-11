@@ -1,6 +1,8 @@
+import logging
 import pytest
 from io import StringIO
 from unittest.mock import MagicMock
+from ulta.common.cancellation import Cancellation
 from ulta.common.job import Job
 from ulta.common.exceptions import ArtifactUploadError
 from ulta.service.log_uploader_service import LogUploaderService, LogReader, CHUNK_MAX_SIZE, MESSAGE_MAX_LENGTH
@@ -23,7 +25,7 @@ def test_read_log_data(data, expected, chunk_max_size, message_max_length):
     chunk_max_size = chunk_max_size or CHUNK_MAX_SIZE
     message_max_length = message_max_length or MESSAGE_MAX_LENGTH
     data_stream = StringIO(data, newline='\n')
-    reader = LogReader('', MagicMock())
+    reader = LogReader('', logging.getLogger())
     chunks = list(
         reader.read_log_data(data_stream, chunk_max_size=chunk_max_size, message_max_length=message_max_length)
     )
@@ -38,7 +40,7 @@ def test_read_log_data(data, expected, chunk_max_size, message_max_length):
     ],
 )
 def test_log_uploader_handles_errors(patch_log_uploader_send_logs, error):
-    service = LogUploaderService(MagicMock(), MagicMock(), MagicMock())
+    service = LogUploaderService(MagicMock(), Cancellation(), logging.getLogger())
     job = Job(
         id='123',
         config={'pandora': {'enabled': True}},
@@ -50,3 +52,4 @@ def test_log_uploader_handles_errors(patch_log_uploader_send_logs, error):
     with pytest.raises(ArtifactUploadError):
         service.publish_artifacts(job)
     patch_log_uploader_send_logs.assert_called()
+    assert not service.cancellation.is_set()

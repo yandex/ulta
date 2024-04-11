@@ -139,7 +139,8 @@ def test_urlparser(url, expected_host, expected_port):
     ],
 )
 def test_audience_url(url, expected):
+    sa_key = SAKey('id', 'key_id', 'asdfsd')
     assert (
         expected
-        == JwtTokenRequester(url, MagicMock(), MagicMock(), audience_url=AUDIENCE_URL_FROM_IAM_ENDPOINT).audience_url
+        == JwtTokenRequester(url, sa_key, MagicMock(), audience_url=AUDIENCE_URL_FROM_IAM_ENDPOINT).audience_url
     )

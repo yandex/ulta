@@ -1,10 +1,10 @@
-from pytest import mark
+import pytest
 from ulta.cli_args import parse_args, CliArgs
 from ulta.yc.config import YANDEX_COMPUTE
 
 
-@mark.parametrize(('command', 'expected_command'), [(None, 'serve'), ('serve', 'serve'), ('run', 'run')])
-@mark.parametrize(
+@pytest.mark.parametrize(('command', 'expected_command'), [(None, 'serve'), ('serve', 'serve'), ('run', 'run')])
+@pytest.mark.parametrize(
     ('args', 'expected'),
     [
         ([], CliArgs()),
@@ -22,7 +22,7 @@ def test_common_cli_args(args, command, expected_command, expected: CliArgs):
     assert parse_args(args) == expected
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('args', 'expected'),
     [
         (['--agent-name', 'blah', 'run', 'haha'], CliArgs(agent_name='blah', test_id='haha')),

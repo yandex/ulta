@@ -1,6 +1,6 @@
 import functools
 import json
-
+import logging
 import grpc
 import pytest
 from google.api_core.exceptions import (
@@ -13,7 +13,6 @@ from google.api_core.exceptions import (
     NotFound,
 )
 
-from pytest import mark
 from yandex.cloud.loadtesting.agent.v1 import job_service_pb2, agent_service_pb2
 
 from ulta.yc.backend_client import YCLoadtestingClient, YCJobDataUploaderClient
@@ -26,6 +25,7 @@ from ulta.common.job_status import AdditionalJobStatus, JobStatus
 from ulta.common.cancellation import Cancellation
 from ulta.service.tank_client import TankClient, TankStatus
 from ulta.service.service import UltaService
+from ulta.common.state import State
 from ulta.service.status_reporter import StatusReporter
 from ulta.common.exceptions import (
     JobStoppedError,
@@ -58,11 +58,11 @@ def ulta_service(sleep_time: float = 1):
         agent,
     )
 
-    tank_client = TankClient(MagicMock(), '/tmp', '/var/lock', job_data_client, 'api_address')
+    tank_client = TankClient(logging.getLogger(), '/tmp', '/var/lock', job_data_client, 'api_address')
     cancellation = Cancellation()
 
     return UltaService(
-        MagicMock(),
+        logging.getLogger(),
         loadtesting_client,
         tank_client,
         YCS3Client('storage_url', MagicMock()),
@@ -73,7 +73,7 @@ def ulta_service(sleep_time: float = 1):
     )
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_client_claim_job_status',
@@ -95,7 +95,7 @@ def test_serve_single_job_doesnt_run_if_job_is_mismatch(
         ulta_service().serve_single_job('job-123')
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_client_claim_job_status',
@@ -150,7 +150,7 @@ def test_cancellation(
     service.serve()
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     'claim_status_error',
     [
         FailedPrecondition(''),
@@ -159,22 +159,27 @@ def test_cancellation(
 )
 def test_cancellation_from_reporter(
     patch_tank_client_get_tank_status,
-    patch_status_reporter_report_tank_status,
+    patch_loadtesting_client_claim_tank_status,
     patch_loadtesting_client_get_job,
     check_threads_leak,
     claim_status_error,
 ):
     patch_tank_client_get_tank_status.return_value = TankStatus.READY_FOR_TEST
     patch_loadtesting_client_get_job.side_effect = NotFound('')
-    patch_status_reporter_report_tank_status.side_effect = claim_status_error
+    patch_loadtesting_client_claim_tank_status.side_effect = claim_status_error
     service = ulta_service()
-    reporter = StatusReporter(MagicMock(), service.tank_client, service.loadtesting_client, service.cancellation)
+    reporter = StatusReporter(
+        logging.getLogger(), service.tank_client, service.loadtesting_client, service.cancellation, State()
+    )
     with reporter.run():
         service.serve()
-    patch_status_reporter_report_tank_status.assert_called_with(TankStatus.STOPPED)
+    patch_loadtesting_client_claim_tank_status.assert_called_with(
+        str(TankStatus.STOPPED.name),
+        "The backend doesn't know this agent: agent has been deleted or account is missing loadtesting.generatorClient role.",
+    )
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     'job_message, expected_ammo, expect_s3, expect_transient',
     [
         (
@@ -229,12 +234,12 @@ def test__extract_ammo(
         patch_loadtesting_client_download_transient_ammo.assert_not_called()
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_s3_client_download',
     'patch_loadtesting_client_download_transient_ammo',
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('tank_status', 'job', 'job_id'),
     [
         (
@@ -305,13 +310,13 @@ def test_get_job_error(check_threads_leak):
             _ = ulta_service().get_job()
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_client_claim_job_status',
     'patch_tank_client_run_job',
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('job_status'),
     [
         (AdditionalJobStatus.FAILED),
@@ -337,7 +342,7 @@ def test_serve_job(
     patch_loadtesting_client_claim_job_status.assert_called_with('123', job_status, None, None)
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_client_claim_job_status',
@@ -355,13 +360,13 @@ def test_serve_job_stop(
         ulta_service().serve_lt_job(job)
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_client_claim_job_status',
     'patch_tank_client_run_job',
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     'raise_ex, expected_status_args, expected_exit_code',
     [
         (JobStoppedError(), ['STOPPED', None, None], 0),
@@ -390,13 +395,13 @@ def test_claim_job_status_on_errors(
     assert job_got.status.exit_code == expected_exit_code
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_tank_status',
     'patch_loadtesting_client_claim_job_status',
     'patch_tank_client_run_job',
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('call_function', 'exception_to_raise'),
     [
         ('claim_job_status', NotFound),
@@ -424,14 +429,14 @@ def test_serve_job_error(
             ulta_service().serve_lt_job(job)
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_loadtesting_client_claim_job_status',
     'patch_tank_client_finish',
     'patch_tank_client_run_job',
 )
-@mark.parametrize('mock_failure', ['serve_lt_signal', 'claim_job_status'])
-@mark.parametrize(
+@pytest.mark.parametrize('mock_failure', ['serve_lt_signal', 'claim_job_status'])
+@pytest.mark.parametrize(
     'scenario',
     [
         [InternalServerError('internal error')],
@@ -477,7 +482,7 @@ def test_serve_job_sustain_non_critical_lt_errors(
     assert not scenario
 
 
-@mark.usefixtures(
+@pytest.mark.usefixtures(
     'patch_tank_client_get_tank_status',
     'patch_tank_client_finish',
     'patch_tank_client_run_job',
@@ -554,13 +559,15 @@ def test_publish_artifacts_raise_no_error(error):
     a2.service.publish_artifacts.assert_called()
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     'test_case',
     (
         (
             'stub_agent',
             'ClaimStatus',
-            functools.partial(YCLoadtestingClient.claim_tank_status, tank_status='STATUS_UNSPECIFIED'),
+            functools.partial(
+                YCLoadtestingClient.claim_tank_status, tank_status='STATUS_UNSPECIFIED', status_message=''
+            ),
             agent_service_pb2.ClaimAgentStatusResponse(code=0),
         ),
         (
@@ -580,7 +587,7 @@ def test_publish_artifacts_raise_no_error(error):
         ),
     ),
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     'tested_error',
     [
         grpc.StatusCode.UNKNOWN,

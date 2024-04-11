@@ -1,7 +1,5 @@
 import grpc
 
-from datetime import datetime
-
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 from yandex.cloud.logging.v1 import (
@@ -11,6 +9,7 @@ from yandex.cloud.logging.v1 import (
     log_resource_pb2,
 )
 from ulta.common.interfaces import CloudLoggingClient
+from ulta.common.utils import now
 from ulta.yc.ycloud import TokenProviderProtocol
 
 
@@ -25,7 +24,7 @@ class YCCloudLoggingClient(CloudLoggingClient):
         level = level or log_entry_pb2.LogLevel.Level.INFO
         json_payload = Struct()
         json_payload.update({'request_id': request_id})
-        current_time = Timestamp(seconds=int(datetime.utcnow().timestamp()))
+        current_time = Timestamp(seconds=int(now().timestamp()))
         entry_logs = [
             log_entry_pb2.IncomingLogEntry(message=data, level=level, json_payload=json_payload, timestamp=current_time)
             for data in log_data

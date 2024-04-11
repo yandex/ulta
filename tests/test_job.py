@@ -1,8 +1,8 @@
-from pytest import mark
+import pytest
 from ulta.common.job import Job, Generator, JobPluginType
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('config', 'exp_generator'),
     [
         ({'pandora': {'enabled': True, 'package': 'yandextank.plugins.Pandora'}}, Generator.PANDORA),
@@ -15,7 +15,7 @@ def test_generator(config, exp_generator):
     assert Job(id='id', config=config).generator == exp_generator
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('config', 'exp_enabled'),
     [
         ({'autostop': {'enabled': True, 'package': JobPluginType.AUTOSTOP}}, True),
@@ -34,7 +34,7 @@ def test_job_plugin_enabled(config, exp_enabled):
     assert Job(id='id', config=config).plugin_enabled(JobPluginType.AUTOSTOP) == exp_enabled
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('config', 'expected_plugins'),
     [
         ({'uploader': {'enabled': True, 'package': JobPluginType.UPLOADER}}, {'uploader'}),

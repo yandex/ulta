@@ -39,6 +39,10 @@ class TankStatus(IntEnum):
     TANK_FAILED = 4
     STOPPED = 5
     UPLOADING_ARTIFACTS = 6
+    ERROR = 7
+
+
+IDLE_STATUSES = [TankStatus.STATUS_UNSPECIFIED, TankStatus.READY_FOR_TEST, TankStatus.STOPPED]
 
 
 class TankStatusProvider(Protocol):

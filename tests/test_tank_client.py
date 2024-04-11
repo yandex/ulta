@@ -1,11 +1,12 @@
-from pytest import mark
+import logging
+import pytest
 from unittest.mock import MagicMock
 from ulta.service.tank_client import TankClient
 from ulta.common.job import Job, JobPluginType
 from ulta.common.job_status import AdditionalJobStatus
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('response', 'exp_error', 'exp_error_type'),
     [
         ({}, '', None),
@@ -24,7 +25,7 @@ def test_extract_error(response, exp_error, exp_error_type):
     assert error_type == exp_error_type
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('job_response', 'exp_status', 'exp_exit_code'),
     [
         ({}, AdditionalJobStatus.FAILED, 1),
@@ -45,7 +46,7 @@ def test_parse_job_status(
 
 
 def test_finish_awaits_running_jobs():
-    client = TankClient(MagicMock(), '', '', MagicMock(), 'api_address')
+    client = TankClient(logging.getLogger(), '', '', MagicMock(), 'api_address')
     w1, w2, f1, f2 = MagicMock(), MagicMock(), MagicMock(), MagicMock()
     client._background_workers = [w1, w2]
     client._finalizers = [f1, f2]
@@ -56,7 +57,7 @@ def test_finish_awaits_running_jobs():
     f2.run.assert_called()
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('config', 'expected_patch'),
     [
         (
@@ -87,7 +88,7 @@ def test_finish_awaits_running_jobs():
     ],
 )
 def test_disable_uploaders(config, expected_patch):
-    tank_client = TankClient(MagicMock(), '/tmp', '/var/lock', MagicMock(), 'api_address')
+    tank_client = TankClient(logging.getLogger(), '/tmp', '/var/lock', MagicMock(), 'api_address')
     job = Job(id='id', config=config)
     patch = tank_client._generate_disable_data_uploaders_patch(job)
     assert expected_patch == patch

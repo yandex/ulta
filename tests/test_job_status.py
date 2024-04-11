@@ -1,9 +1,9 @@
-from pytest import mark
+import pytest
 from ulta.common.job_status import JobStatus, AdditionalJobStatus
 from yandextank.common.util import Status as TankJobStatus
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('status', 'exp_status', 'exp_exit_code', 'exp_finished'),
     [
         (AdditionalJobStatus.AUTOSTOPPED, 'AUTOSTOPPED', 20, True),
@@ -12,7 +12,7 @@ from yandextank.common.util import Status as TankJobStatus
         (AdditionalJobStatus.STOPPED, 'STOPPED', 0, True),
     ],
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     'status_transform',
     [
         lambda s: s,
@@ -26,7 +26,7 @@ def test_job_status_from_additional_status(status, status_transform, exp_status,
     assert s.finished() == exp_finished
 
 
-@mark.parametrize(
+@pytest.mark.parametrize(
     ('status', 'exp_status', 'exp_exit_code', 'exp_finished'),
     [
         (TankJobStatus.TEST_FINISHED, 'FINISHED', 0, True),
@@ -38,7 +38,7 @@ def test_job_status_from_additional_status(status, status_transform, exp_status,
         (TankJobStatus.TEST_WAITING_FOR_A_COMMAND_TO_RUN, 'WAITING_FOR_A_COMMAND_TO_RUN', None, False),
     ],
 )
-@mark.parametrize(
+@pytest.mark.parametrize(
     'status_transform',
     [
         lambda s: s,

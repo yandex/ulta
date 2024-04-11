@@ -4,10 +4,12 @@ import os
 from ulta.common.cancellation import Cancellation
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import NamedService, TransportFactory
-from ulta.service.loadtesting_agent_service import create_loadtesting_agent_service, ANONYMOUS_AGENT_ID
+from ulta.common.utils import ensure_dir
+from ulta.service.loadtesting_agent_service import create_loadtesting_agent_service
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.log_uploader_service import LogUploaderService
 from ulta.service.service import UltaService
+from ulta.common.state import Observer
 from ulta.service.status_reporter import StatusReporter, DummyStatusReporter
 from ulta.service.tank_client import TankClient
 
@@ -15,16 +17,26 @@ MIN_SLEEP_TIME = 1
 
 
 def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Logger) -> int:
+    service_state = Observer(logger, cancellation)
     transport_factory = TransportFactory.get(config)
     loadtesting_agent = create_loadtesting_agent_service(config, transport_factory.create_agent_client(), logger)
-    agent = loadtesting_agent.register()
-    if config.agent_id_file and loadtesting_agent.agent.id != ANONYMOUS_AGENT_ID:
-        os.makedirs(os.path.dirname(config.agent_id_file), exist_ok=True)
-        loadtesting_agent.store_agent_id(agent)
+
+    agent = loadtesting_agent.agent
+    with service_state.observe(stage='register agent in service'):
+        agent = loadtesting_agent.register()
+
+    if config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
+        with service_state.observe(stage='cache agent id', critical=False):
+            ensure_dir(os.path.dirname(config.agent_id_file))
+            loadtesting_agent.store_agent_id(agent)
     loadtesting_client = transport_factory.create_loadtesting_client(agent)
 
     tests_dir = os.path.join(config.work_dir, 'tests')
-    os.makedirs(tests_dir, exist_ok=True)
+    service_dir = os.path.join(config.work_dir, '_tmp')
+    with service_state.observe_file_system(stage='check working directories'):
+        ensure_dir(tests_dir)
+        ensure_dir(service_dir)
+
     tank_client = TankClient(
         logger,
         tests_dir,
@@ -35,8 +47,6 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
 
     sleep_time = max(config.request_frequency, MIN_SLEEP_TIME)
     s3_client = transport_factory.create_s3_client()
-    service_dir = os.path.join(config.work_dir, '_tmp')
-    os.makedirs(service_dir, exist_ok=True)
 
     service = UltaService(
         logger=logger,
@@ -60,7 +70,14 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
     status_reporter = (
         DummyStatusReporter()
         if agent.is_anonymous_external_agent()
-        else StatusReporter(logger, service, loadtesting_client, cancellation, sleep_time)
+        else StatusReporter(
+            logger,
+            service,
+            loadtesting_client,
+            cancellation,
+            service_state,
+            sleep_time,
+        )
     )
 
     with status_reporter.run():

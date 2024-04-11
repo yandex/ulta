@@ -52,7 +52,6 @@ class UltaService:
         self.s3_client = s3_client
         self.tank_client = tank_client
         self.sleep_time = sleep_time
-        self.tank_status_report_delay = sleep_time
         self.job_pooling_delay = sleep_time
         self.artifact_uploaders = artifact_uploaders
         self.max_waiting_time = max_waiting_time

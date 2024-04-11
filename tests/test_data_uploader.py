@@ -1,16 +1,14 @@
 import logging
-from pytest import raises
+import pytest
 from multiprocessing import Queue
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch, call
 from ulta.service.data_uploader import DataUploader
-
-_TEST_LOGGER = logging.getLogger(__name__)
 
 
 def test_data_uploader_default_workflow():
     with patch.object(DataUploader, 'send_data', return_value=0) as mock_send_data:
         q = Queue()
-        uploader = DataUploader('job_id', q, _TEST_LOGGER)
+        uploader = DataUploader('job_id', q, logging.getLogger())
         uploader.start()
         assert uploader.thread.is_alive()
         q.put(0)
@@ -26,13 +24,13 @@ def test_data_uploader_default_workflow():
 
 
 def test_data_uploader_finish_does_not_raise_if_not_started():
-    uploader = DataUploader('job_id', MagicMock(), _TEST_LOGGER)
+    uploader = DataUploader('job_id', Queue(), logging.getLogger())
     for _ in range(5):
         uploader.finish()
 
 
 def test_data_uploader_raise_if_started_after_finish():
-    uploader = DataUploader('job_id', MagicMock(), _TEST_LOGGER)
+    uploader = DataUploader('job_id', Queue(), logging.getLogger())
     uploader.finish()
-    with raises(RuntimeError):
+    with pytest.raises(RuntimeError):
         uploader.start()

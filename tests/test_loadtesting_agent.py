@@ -1,4 +1,5 @@
 import uuid
+import logging
 import pytest
 from unittest.mock import patch, MagicMock
 from google.protobuf.any_pb2 import Any
@@ -49,7 +50,7 @@ def test_agent_send_version_on_greet(patch_agent_registration_stub_register):
 
     agent_client = YCAgentClient(version, MagicMock(), MagicMock())
     lt = LoadtestingAgentService(
-        MagicMock(), agent_client, agent_origin=AgentOrigin.COMPUTE_LT_CREATED, agent_version=version
+        logging.getLogger(), agent_client, agent_origin=AgentOrigin.COMPUTE_LT_CREATED, agent_version=version
     )
     agent = lt.register()
 
@@ -72,7 +73,7 @@ def test_external_agent_registration(patch_agent_registration_stub_external_regi
     token_provider.get_auth_metadata.return_value = auth_metadata
     agent_client = YCAgentClient(version, MagicMock(), token_provider)
     lt = LoadtestingAgentService(
-        MagicMock(),
+        logging.getLogger(),
         agent_client,
         agent_origin=AgentOrigin.EXTERNAL,
         agent_name='agent_name',
@@ -93,5 +94,5 @@ def test_external_agent_registration_fail():
         load_agent_id.return_value = None
         with pytest.raises(AgentOriginError):
             _ = LoadtestingAgentService(
-                MagicMock(), MagicMock(), agent_origin=AgentOrigin.EXTERNAL, agent_name='persistent'
+                logging.getLogger(), MagicMock(), agent_origin=AgentOrigin.EXTERNAL, agent_name='persistent'
             ).register()

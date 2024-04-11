@@ -1,3 +1,4 @@
+import logging
 import pytest
 import os
 from unittest.mock import MagicMock
@@ -74,7 +75,7 @@ def test__relative_to(root, path, expected):
 )
 @pytest.mark.usefixtures('patch_cwd')
 def test_collect_files(dir_path, filter_include, filter_exclude, expected):
-    uploader = S3ArtifactUploader(MagicMock(), MagicMock(), Cancellation(), MagicMock())
+    uploader = S3ArtifactUploader(MagicMock(), MagicMock(), Cancellation(), logging.getLogger())
     actual = uploader._collect_files(Path(dir_path), filter_include, filter_exclude)
     actual = [normalize_for_test(p, dir_path) for p in actual]
     assert not (set(actual) - set(expected)), 'Actual contains excess items: %s' % (set(actual) - set(expected))
@@ -93,7 +94,7 @@ def test_collect_files(dir_path, filter_include, filter_exclude, expected):
 def test_artifact_uploader_handles_errors(
     patch_s3_uploader_collect_artifacts, patch_s3_uploader_upload_artifacts, error, expected_error
 ):
-    uploader = S3ArtifactUploader(MagicMock(), MagicMock(), Cancellation(), MagicMock())
+    uploader = S3ArtifactUploader(MagicMock(), MagicMock(), Cancellation(), logging.getLogger())
     job = Job(
         id='123',
         config={'pandora': {'enabled': True}},

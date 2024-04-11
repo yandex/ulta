@@ -15,7 +15,7 @@ class NamedService(Generic[T]):
 
 
 class TankStatusClient(Protocol):
-    def claim_tank_status(self, tank_status: str) -> None:
+    def claim_tank_status(self, tank_status: str, status_message: str | None) -> None:
         ...
 
 
@@ -59,10 +59,10 @@ class JobDataUploaderClient(Protocol):
 
 
 class AgentClient(Protocol):
-    def register_agent(self, compute_instance_id: str) -> str:
+    def register_agent(self) -> str:
         ...
 
-    def register_external_agent(self, folder_id: str, name: str, agent_version: str) -> str:
+    def register_external_agent(self, folder_id: str, name: str | None) -> str:
         ...
 
 

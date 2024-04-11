@@ -34,7 +34,7 @@ class YCAgentClient(AgentClient):
         return response.agent_instance_id
 
     @catch_exceptions
-    def register_external_agent(self, folder_id: str, name: str) -> str:
+    def register_external_agent(self, folder_id: str, name: str | None) -> str:
         response = self._register_stub.ExternalAgentRegister(
             agent_registration_service_pb2.ExternalAgentRegisterRequest(
                 folder_id=folder_id,
