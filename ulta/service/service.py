@@ -237,14 +237,18 @@ class UltaService:
             time.sleep(self.sleep_time)
 
     def serve_single_job(self, job_id: str) -> JobResult:
-        job = self.get_job(job_id)
-        if not job:
-            raise JobNotExecutedError(f'Unable to find cloud job with id {job_id}')
-        if job.id != job_id:
-            raise JobNotExecutedError(f'Requested cloud job {job_id}, got: {job.id}')
-        job = self.execute_job(job)
-        self.publish_artifacts(job)
-        return job.result()
+        try:
+            job = self.get_job(job_id)
+            if not job:
+                raise JobNotExecutedError(f'Unable to find cloud job with id {job_id}')
+            if job.id != job_id:
+                raise JobNotExecutedError(f'Requested cloud job {job_id}, got: {job.id}')
+            job = self.execute_job(job)
+            self.publish_artifacts(job)
+            return job.result()
+        except Exception:
+            self.logger.exception('Job execution failed for job_id (%s)', job_id)
+            raise
 
     def execute_job(self, job: Job) -> Job:
         try:
