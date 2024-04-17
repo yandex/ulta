@@ -1,5 +1,6 @@
 import grpc
 
+from google.protobuf.field_mask_pb2 import FieldMask
 from yandex.cloud.loadtesting.agent.v1 import (
     agent_service_pb2,
     agent_service_pb2_grpc,
@@ -142,6 +143,7 @@ class YCJobDataUploaderClient:
             imbalance_point=rps,
             imbalance_ts=timestamp,
             imbalance_comment=comment,
+            update_mask=FieldMask(paths=['imbalance_point', 'imbalance_ts', 'imbalance_comment']),
         )
         self.stub_test.Update(request, timeout=self.timeout, metadata=self._request_metadata())
 
