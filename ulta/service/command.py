@@ -1,15 +1,19 @@
 import logging
-import os
 
 from ulta.common.cancellation import Cancellation
 from ulta.common.config import UltaConfig
-from ulta.common.interfaces import NamedService, TransportFactory
-from ulta.common.utils import ensure_dir
-from ulta.service.loadtesting_agent_service import create_loadtesting_agent_service
+from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
+from ulta.service.loadtesting_agent_service import (
+    create_loadtesting_agent_service,
+    try_store_agent_id,
+    try_read_agent_id,
+)
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.log_uploader_service import LogUploaderService
 from ulta.service.service import UltaService
-from ulta.common.state import Observer
+from ulta.common.file_system import make_fs_from_ulta_config, FileSystemObserver
+from ulta.common.healthcheck import HealthCheck
+from ulta.common.state import State, GenericObserver
 from ulta.service.status_reporter import StatusReporter, DummyStatusReporter
 from ulta.service.tank_client import TankClient
 
@@ -17,32 +21,19 @@ MIN_SLEEP_TIME = 1
 
 
 def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Logger) -> int:
-    service_state = Observer(logger, cancellation)
+    service_state = State()
+    fs = make_fs_from_ulta_config(config)
     transport_factory = TransportFactory.get(config)
-    loadtesting_agent = create_loadtesting_agent_service(config, transport_factory.create_agent_client(), logger)
+    observer = GenericObserver(service_state, logger, cancellation)
 
-    agent = loadtesting_agent.agent
-    with service_state.observe(stage='register agent in service'):
-        agent = loadtesting_agent.register()
-
-    if config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
-        with service_state.observe(stage='cache agent id', critical=False):
-            ensure_dir(os.path.dirname(config.agent_id_file))
-            loadtesting_agent.store_agent_id(agent)
+    agent = _register_loadtesting_agent(config, transport_factory, observer, logger)
     loadtesting_client = transport_factory.create_loadtesting_client(agent)
 
-    tests_dir = os.path.join(config.work_dir, 'tests')
-    service_dir = os.path.join(config.work_dir, '_tmp')
-    with service_state.observe_file_system(stage='check working directories'):
-        ensure_dir(tests_dir)
-        ensure_dir(service_dir)
-
     tank_client = TankClient(
-        logger,
-        tests_dir,
-        config.lock_dir,
-        transport_factory.create_job_data_uploader_client(agent),
-        config.backend_service_url,
+        logger=logger,
+        fs=fs,
+        loadtesting_client=transport_factory.create_job_data_uploader_client(agent),
+        data_uploader_api_address=config.backend_service_url,
     )
 
     sleep_time = max(config.request_frequency, MIN_SLEEP_TIME)
@@ -50,10 +41,11 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
 
     service = UltaService(
         logger=logger,
+        state=service_state,
         loadtesting_client=loadtesting_client,
         tank_client=tank_client,
         s3_client=s3_client,
-        work_dir=service_dir,
+        tmp_dir=fs.tmp_dir,
         sleep_time=sleep_time,
         artifact_uploaders=[
             NamedService(
@@ -80,10 +72,37 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
         )
     )
 
-    with status_reporter.run():
-        if config.test_id:
-            result = service.serve_single_job(config.test_id)
-            return result.exit_code
-        else:
-            service.serve()
+    file_system_hc = FileSystemObserver(fs, service_state, logger, cancellation)
+    with HealthCheck(observer, [file_system_hc]).run_healthcheck():
+        with status_reporter.run():
+            if config.test_id:
+                result = service.serve_single_job(config.test_id)
+                return result.exit_code
+            else:
+                service.serve()
     return 0
+
+
+def _register_loadtesting_agent(
+    config: UltaConfig,
+    transport_factory: ClientFactory,
+    observer: GenericObserver,
+    logger: logging.Logger,
+):
+    agent_id = None
+    if not config.no_cache and config.agent_id_file:
+        with observer.observe(stage='load cached agent id from file'):
+            agent_id = try_read_agent_id(config.agent_id_file, logger)
+    loadtesting_agent = create_loadtesting_agent_service(
+        config=config, agent_client=transport_factory.create_agent_client(), agent_id=agent_id, logger=logger
+    )
+
+    with observer.observe(stage="register agent in service"):
+        loadtesting_agent.register()
+
+    agent = loadtesting_agent.agent
+    if not config.no_cache and config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
+        with observer.observe(stage='cache agent id to file'):
+            try_store_agent_id(agent.id, config.agent_id_file)
+
+    return loadtesting_agent.agent

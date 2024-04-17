@@ -1,5 +1,4 @@
 import multiprocessing
-import os
 import inspect
 import logging
 import yaml
@@ -15,6 +14,7 @@ from yandextank.core.tankworker import TankWorker
 from yandextank.validator.validator import ValidationError
 
 from ulta.common.exceptions import TankError
+from ulta.common.file_system import FS, ensure_dir
 from ulta.common.job import Job, JobPluginType
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
 from ulta.common.interfaces import JobDataUploaderClient
@@ -56,15 +56,14 @@ class TankClient:
     def __init__(
         self,
         logger: logging.Logger,
-        tests_dir: str,
-        lock_dir: str,
+        fs: FS,
         loadtesting_client: JobDataUploaderClient,
         data_uploader_api_address: str,
         tank_worker_timeout: int = TANK_WORKER_TIMEOUT,
     ):
         self.logger = logger
-        self.tests_dir = tests_dir
-        self.lock_dir = lock_dir
+        self.fs = fs
+        self.lock_dir = fs.lock_dir.absolute().as_posix()
         self.tank_worker = None
         self.loadtesting_client = loadtesting_client
         self.data_uploader_api_address = data_uploader_api_address
@@ -76,7 +75,7 @@ class TankClient:
     def _generate_job_config_patches(self, job: Job) -> list:
         patch = {
             'core': {
-                'artifacts_base_dir': self.tests_dir,
+                'artifacts_base_dir': self.fs.tests_dir.as_posix(),
                 'lock_dir': self.lock_dir,
             },
         }
@@ -84,7 +83,7 @@ class TankClient:
             if 'cache_dir' not in phantom:
                 patch.update(
                     {
-                        'phantom': {'cache_dir': os.path.join(self.tests_dir, 'stpd-cache')},
+                        'phantom': {'cache_dir': (self.fs.tests_dir / 'stpd-cache').as_posix()},
                     }
                 )
         patch.update(self._generate_disable_data_uploaders_patch(job))
@@ -98,10 +97,11 @@ class TankClient:
         return patch
 
     def dump_job_config(self, job: Job) -> str:
-        tank_config_path = os.path.join(self.tests_dir, 'config')
-        with open(tank_config_path, 'w') as f:
+        job_tmp_dir = ensure_dir(self.fs.tmp_dir / job.id)
+
+        with (job_tmp_dir / 'config').open('w') as f:
             yaml.dump(job.config, f)
-        return tank_config_path
+            return f.name
 
     def prepare_job(self, job: Job, files: Iterable[str]) -> Job:
         if self._is_test_session_running():
@@ -125,7 +125,7 @@ class TankClient:
         except (ValidationError, LockError) as e:
             raise TankError(str(e)) from e
         job.tank_job_id = self.tank_worker.test_id
-        job.artifact_dir_path = self.get_dir_for_test(job.tank_job_id)
+        job.artifact_dir_path = self.get_dir_for_test(job.tank_job_id).absolute().as_posix()
 
         self._register_workers(job)
         self.tank_worker.start()
@@ -211,15 +211,15 @@ class TankClient:
             return JobStatus.from_status(self.tank_worker.status)
 
         test_dir = self.get_dir_for_test(job_id)
-        if not os.path.exists(test_dir):
+        if not test_dir.exists():
             self.logger.warning('get job status: %s directory not found', test_dir)
             return JobStatus.from_status(Status.TEST_FINISHED)
-        finish_status_file = os.path.join(test_dir, TankWorker.FINISH_FILENAME)
-        if not os.path.exists(finish_status_file):
+        finish_status_file = test_dir / TankWorker.FINISH_FILENAME
+        if not finish_status_file.exists():
             self.logger.warning('get_job_status: %s file not found', finish_status_file)
             return JobStatus.from_status(Status.TEST_FINISHED)
         try:
-            with open(finish_status_file) as f:
+            with finish_status_file.open() as f:
                 return self.parse_job_status(yaml.safe_load(f) or {})
         except yaml.YAMLError:
             self.logger.exception("couldn't parse job status file")
@@ -264,5 +264,5 @@ class TankClient:
     def use_resource_manager(cls, resource_manager_factory: Callable[[], ResourceManager]):
         cls._resource_manager_factory = resource_manager_factory
 
-    def get_dir_for_test(self, tank_job_id: str) -> str:
-        return str(Path(os.path.join(self.tests_dir, tank_job_id)).absolute())
+    def get_dir_for_test(self, tank_job_id: str) -> Path:
+        return self.fs.tests_dir / tank_job_id

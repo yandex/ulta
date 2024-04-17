@@ -12,7 +12,7 @@ from google.api_core.exceptions import (
     InvalidArgument,
     NotFound,
 )
-
+from pathlib import Path
 from yandex.cloud.loadtesting.agent.v1 import job_service_pb2, agent_service_pb2
 
 from ulta.yc.backend_client import YCLoadtestingClient, YCJobDataUploaderClient
@@ -20,12 +20,13 @@ from ulta.service.tank_client import TankError
 from ulta.common.agent import AgentOrigin, AgentInfo
 from ulta.common.ammo import Ammo
 from ulta.common.cancellation import CancellationRequest
+from ulta.common.file_system import FS
 from ulta.common.job import Job
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
+from ulta.common.state import State
 from ulta.common.cancellation import Cancellation
 from ulta.service.tank_client import TankClient, TankStatus
 from ulta.service.service import UltaService
-from ulta.common.state import State
 from ulta.service.status_reporter import StatusReporter
 from ulta.common.exceptions import (
     JobStoppedError,
@@ -39,7 +40,8 @@ from yandextank.common.util import Status as TankJobStatus
 FAKE_AGENT_VERSION = 'some_version'
 
 
-def ulta_service(sleep_time: float = 1):
+@pytest.fixture
+def ulta_service():
     agent = AgentInfo(
         id='agent_id',
         origin=AgentOrigin.COMPUTE_LT_CREATED,
@@ -57,20 +59,24 @@ def ulta_service(sleep_time: float = 1):
         MagicMock(),
         agent,
     )
+    fs = FS(tmp_dir=Path('/tmp'), tests_dir=Path('/tmp'), lock_dir=Path('/tmp'))
 
-    tank_client = TankClient(logging.getLogger(), '/tmp', '/var/lock', job_data_client, 'api_address')
+    tank_client = TankClient(logging.getLogger(), fs, job_data_client, 'api_address')
     cancellation = Cancellation()
+    state = State()
 
-    return UltaService(
-        logging.getLogger(),
-        loadtesting_client,
-        tank_client,
-        YCS3Client('storage_url', MagicMock()),
-        '/tmp',
-        sleep_time,
-        MagicMock(),
-        cancellation,
-    )
+    with patch('ulta.common.file_system.ensure_dir'):
+        yield UltaService(
+            logging.getLogger(),
+            state,
+            loadtesting_client,
+            tank_client,
+            YCS3Client('storage_url', MagicMock()),
+            fs.tmp_dir,
+            0.1,
+            MagicMock(),
+            cancellation,
+        )
 
 
 @pytest.mark.usefixtures(
@@ -84,6 +90,7 @@ def test_serve_single_job_doesnt_run_if_job_is_mismatch(
     patch_loadtesting_client_get_job,
     patch_tank_client_get_tank_status,
     check_threads_leak,
+    ulta_service: UltaService,
 ):
     patch_tank_client_get_tank_status.return_value = TankStatus.READY_FOR_TEST
     patch_loadtesting_client_get_job.return_value = job_service_pb2.Job(
@@ -92,7 +99,7 @@ def test_serve_single_job_doesnt_run_if_job_is_mismatch(
         data_payload=[job_service_pb2.TestDataEntry(name='ammo', is_transient=True)],
     )
     with pytest.raises(JobNotExecutedError):
-        ulta_service().serve_single_job('job-123')
+        ulta_service.serve_single_job('job-123')
 
 
 @pytest.mark.usefixtures(
@@ -110,6 +117,7 @@ def test_serve_single_job(
     patch_tank_client_prepare_job,
     patch_tank_client_get_job_status,
     check_threads_leak,
+    ulta_service: UltaService,
 ):
     patch_tank_client_get_tank_status.return_value = TankStatus.READY_FOR_TEST
     patch_loadtesting_client_get_job.return_value = job_service_pb2.Job(
@@ -122,7 +130,7 @@ def test_serve_single_job(
         signal=job_service_pb2.JobSignalResponse.Signal.Value('SIGNAL_UNSPECIFIED')
     )
     patch_tank_client_prepare_job.return_value = Job('job-123', tank_job_id='job-123')
-    result = ulta_service().serve_single_job('job-123')
+    result = ulta_service.serve_single_job('job-123')
 
     patch_tank_client_prepare_job.assert_called_once()
     patch_tank_client_finish.assert_called()
@@ -133,6 +141,7 @@ def test_cancellation(
     patch_tank_client_get_tank_status,
     patch_loadtesting_client_get_job,
     check_threads_leak,
+    ulta_service: UltaService,
 ):
     cancellation = Cancellation()
     scenario = iter([NotFound('')] * 6)
@@ -145,9 +154,9 @@ def test_cancellation(
 
     patch_tank_client_get_tank_status.return_value = TankStatus.READY_FOR_TEST
     patch_loadtesting_client_get_job.side_effect = test_scenario
-    service = ulta_service()
-    service.cancellation = cancellation
-    service.serve()
+    ulta_service.cancellation = cancellation
+    ulta_service.serve()
+    assert cancellation.is_set()
 
 
 @pytest.mark.parametrize(
@@ -163,16 +172,20 @@ def test_cancellation_from_reporter(
     patch_loadtesting_client_get_job,
     check_threads_leak,
     claim_status_error,
+    ulta_service: UltaService,
 ):
     patch_tank_client_get_tank_status.return_value = TankStatus.READY_FOR_TEST
     patch_loadtesting_client_get_job.side_effect = NotFound('')
     patch_loadtesting_client_claim_tank_status.side_effect = claim_status_error
-    service = ulta_service()
     reporter = StatusReporter(
-        logging.getLogger(), service.tank_client, service.loadtesting_client, service.cancellation, State()
+        logging.getLogger(),
+        ulta_service.tank_client,
+        ulta_service.loadtesting_client,
+        ulta_service.cancellation,
+        State(),
     )
     with reporter.run():
-        service.serve()
+        ulta_service.serve()
     patch_loadtesting_client_claim_tank_status.assert_called_with(
         str(TankStatus.STOPPED.name),
         "The backend doesn't know this agent: agent has been deleted or account is missing loadtesting.generatorClient role.",
@@ -216,8 +229,9 @@ def test__extract_ammo(
     expected_ammo,
     expect_s3,
     expect_transient,
+    ulta_service: UltaService,
 ):
-    ammos = ulta_service()._extract_ammo(job_message, tmp_path)
+    ammos = ulta_service._extract_ammo(job_message, tmp_path)
     if expected_ammo:
         assert ammos[0].name == expected_ammo.name
     else:
@@ -285,12 +299,13 @@ def test_get_job(
     patch_loadtesting_client_get_job,
     tank_status,
     check_threads_leak,
+    ulta_service: UltaService,
     job,
     job_id,
 ):
     patch_tank_client_get_tank_status.return_value = tank_status
     patch_loadtesting_client_get_job.return_value = job
-    res_job = ulta_service().get_job(job_id)
+    res_job = ulta_service.get_job(job_id)
     assert res_job is not None
     assert res_job.id == job.id
     assert res_job.config == json.loads(job.config)
@@ -298,16 +313,18 @@ def test_get_job(
     assert {p.name for p in job.data_payload} == {ammo.name for ammo in res_job.ammos}
 
 
-def test_get_job_not_found(check_threads_leak):
+def test_get_job_not_found(check_threads_leak, ulta_service: UltaService):
     with patch.object(YCLoadtestingClient, 'get_job', side_effect=NotFound('')):
-        job = ulta_service().get_job()
+        job = ulta_service.get_job()
         assert job is None
+        assert ulta_service._observer._state.ok is True
 
 
-def test_get_job_error(check_threads_leak):
+def test_wait_for_a_job_error(check_threads_leak, ulta_service: UltaService):
     with patch.object(YCLoadtestingClient, 'get_job', side_effect=FailedPrecondition('')):
         with pytest.raises(FailedPrecondition):
-            _ = ulta_service().get_job()
+            _ = ulta_service.wait_for_a_job()
+        assert ulta_service._observer._state.ok is False
 
 
 @pytest.mark.usefixtures(
@@ -330,6 +347,7 @@ def test_serve_job(
     patch_loadtesting_client_get_job_signal,
     patch_tank_client_prepare_job,
     check_threads_leak,
+    ulta_service: UltaService,
     job_status,
 ):
     patch_tank_client_get_job_status.return_value = JobStatus.from_status(job_status)
@@ -338,7 +356,7 @@ def test_serve_job(
     )
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
-    ulta_service().serve_lt_job(job)
+    ulta_service.serve_lt_job(job)
     patch_loadtesting_client_claim_job_status.assert_called_with('123', job_status, None, None)
 
 
@@ -351,13 +369,14 @@ def test_serve_job(
 def test_serve_job_stop(
     patch_loadtesting_client_get_job_signal,
     check_threads_leak,
+    ulta_service: UltaService,
 ):
     patch_loadtesting_client_get_job_signal.return_value = job_service_pb2.JobSignalResponse(
         signal=job_service_pb2.JobSignalResponse.Signal.Value('STOP')
     )
     job = Job(id='123', config={'plugin': {'enabled': True}})
     with pytest.raises(JobStoppedError):
-        ulta_service().serve_lt_job(job)
+        ulta_service.serve_lt_job(job)
 
 
 @pytest.mark.usefixtures(
@@ -381,6 +400,7 @@ def test_claim_job_status_on_errors(
     patch_tank_client_prepare_job,
     patch_ulta_serve_lt_job,
     check_threads_leak,
+    ulta_service: UltaService,
     raise_ex,
     expected_status_args,
     expected_exit_code,
@@ -389,7 +409,7 @@ def test_claim_job_status_on_errors(
     patch_tank_client_get_job_status.return_value = JobStatus.from_status(TankJobStatus.TEST_RUNNING)
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
-    job_got = ulta_service().execute_job(job)
+    job_got = ulta_service.execute_job(job)
     patch_loadtesting_client_claim_job_status.assert_called_with('123', *expected_status_args)
     patch_tank_client_stop_job.assert_called()
     assert job_got.status.exit_code == expected_exit_code
@@ -413,6 +433,7 @@ def test_serve_job_error(
     patch_tank_client_get_job_status,
     patch_loadtesting_client_get_job_signal,
     check_threads_leak,
+    ulta_service: UltaService,
     call_function,
     exception_to_raise,
 ):
@@ -426,7 +447,7 @@ def test_serve_job_error(
                 signal=job_service_pb2.JobSignalResponse.Signal.Value('SIGNAL_UNSPECIFIED')
             )
         with pytest.raises(exception_to_raise):
-            ulta_service().serve_lt_job(job)
+            ulta_service.serve_lt_job(job)
 
 
 @pytest.mark.usefixtures(
@@ -458,6 +479,7 @@ def test_serve_job_sustain_non_critical_lt_errors(
     patch_tank_client_get_job_status,
     patch_loadtesting_client_get_job_signal,
     check_threads_leak,
+    ulta_service: UltaService,
     mock_failure,
     scenario,
 ):
@@ -477,7 +499,8 @@ def test_serve_job_sustain_non_critical_lt_errors(
     with patch.object(UltaService, mock_failure, test_scenario) as mock:
         mock.side_effect = test_scenario
         job = Job(id='123', config={'plugin': {'enabled': True}})
-        ulta_service(sleep_time=0.1).serve_lt_job(job)
+        ulta_service.sleep_time = 0.1
+        ulta_service.serve_lt_job(job)
 
     assert not scenario
 
@@ -491,11 +514,12 @@ def test_serve_job_sustain_prepare_job_error(
     patch_tank_client_stop_job,
     patch_loadtesting_client_claim_job_status,
     patch_tank_client_prepare_job,
+    ulta_service: UltaService,
     check_threads_leak,
 ):
     patch_tank_client_prepare_job.side_effect = TankError()
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
-    ulta_service().execute_job(job)
+    ulta_service.execute_job(job)
 
     patch_loadtesting_client_claim_job_status.assert_called_with(
         '123', AdditionalJobStatus.FAILED, 'Could not run job: ', 'internal'
@@ -512,10 +536,11 @@ def test_serve_job_sustain_prepare_job_error(
         RuntimeError,
     ],
 )
-def test_supress_non_critical_errors_strategy_sustain_job_raises_critical_errors(expected_exception):
+def test_supress_non_critical_errors_strategy_sustain_job_raises_critical_errors(
+    ulta_service: UltaService, expected_exception
+):
     with pytest.raises(expected_exception):
-        service = ulta_service()
-        with service.sustain_job():
+        with ulta_service.sustain_job():
             raise expected_exception('')
 
 
@@ -528,9 +553,8 @@ def test_supress_non_critical_errors_strategy_sustain_job_raises_critical_errors
         TooManyRequests(''),
     ],
 )
-def test_supress_non_critical_errors_strategy_sustain_job(expected_exception):
-    service = ulta_service()
-    with service.sustain_job():
+def test_supress_non_critical_errors_strategy_sustain_job(ulta_service: UltaService, expected_exception):
+    with ulta_service.sustain_job():
         raise expected_exception
 
 
@@ -541,7 +565,7 @@ def test_supress_non_critical_errors_strategy_sustain_job(expected_exception):
         RuntimeError(),
     ],
 )
-def test_publish_artifacts_raise_no_error(error):
+def test_publish_artifacts_raise_no_error(ulta_service: UltaService, error):
     job = Job(
         id='123',
         config={'pandora': {'enabled': True}},
@@ -549,12 +573,11 @@ def test_publish_artifacts_raise_no_error(error):
         log_group_id='loggroup',
         artifact_dir_path='/tmp',
     )
-    service = ulta_service()
     a1, a2 = MagicMock(), MagicMock()
     a1.service.publish_artifacts.side_effect = error
     a2.service.publish_artifacts.side_effect = error
-    service.artifact_uploaders = [a1, a2]
-    service.publish_artifacts(job)
+    ulta_service.artifact_uploaders = [a1, a2]
+    ulta_service.publish_artifacts(job)
     a1.service.publish_artifacts.assert_called()
     a2.service.publish_artifacts.assert_called()
 

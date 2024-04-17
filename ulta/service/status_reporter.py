@@ -1,5 +1,4 @@
 import logging
-import threading
 from contextlib import contextmanager
 from google.api_core.exceptions import (
     FailedPrecondition,
@@ -7,6 +6,7 @@ from google.api_core.exceptions import (
     Unauthorized,
     Unauthenticated,
 )
+from ulta.common.background_worker import run_background_worker
 from ulta.common.cancellation import Cancellation, CancellationType
 from ulta.common.interfaces import TankStatusClient
 from ulta.common.state import State as ServiceState
@@ -29,7 +29,6 @@ class StatusReporter:
         self.report_interval = max(1, report_interval)
         self.cancellation = cancellation
         self.service_state = service_state
-        self._stop_event = None
         self._thread = None
 
     def report_tank_status(self, status: TankStatus | None = None, status_message: str | None = None):
@@ -43,50 +42,34 @@ class StatusReporter:
     @contextmanager
     def run(self):
         try:
-            self._run()
-            yield
+            with run_background_worker(self.report_tank_status, self._handle_error, self.report_interval) as cancel:
+                yield cancel
         finally:
-            self._stop()
             try:
                 self.report_tank_status(TankStatus.STOPPED, self.cancellation.explain())
             except BaseException:
                 self.logger.exception('Failed to report STOPPED status')
 
-    def _run(self):
-        stop = threading.Event()
-        self._stop_event = stop
-
-        def worker():
-            while not stop.is_set():
-                try:
-                    self.report_tank_status()
-                except (FailedPrecondition, NotFound, Unauthorized, Unauthenticated):
-                    self.logger.exception("Backend doesn't recognize this agent. Performing shutdown.")
-                    self.logger.error(
-                        '''
-Backend denied this agent.
-It is possible that agent was deleted from backend, or new agent with same name registered.
-If this error keeps repeating - try to delete agentid file, or run agent with
-`ulta --no-cache` or `LOADTESTING_NO_CACHE=1 ulta`
-'''
-                    )
-                    self.cancellation.notify(
-                        "The backend doesn't know this agent: agent has been deleted or account is missing loadtesting.generatorClient role.",
-                        CancellationType.FORCED,
-                    )
-                except Exception:
-                    self.logger.exception('Failed to report agent status')
-                finally:
-                    stop.wait(self.report_interval)
-
-        self._thread = threading.Thread(target=worker)
-        self._thread.start()
-
-    def _stop(self):
-        if self._stop_event:
-            self._stop_event.set()
-        if self._thread:
-            self._thread.join()
+    def _handle_error(self, e: Exception):
+        try:
+            if isinstance(e, (FailedPrecondition, NotFound, Unauthorized, Unauthenticated)):
+                self.logger.error("Backend doesn't recognize this agent. Performing shutdown.", exc_info=e)
+                self.logger.error(
+                    '''
+    Backend denied this agent.
+    It is possible that agent was deleted from backend, or new agent with same name registered.
+    If this error keeps repeating - try to delete agentid file, or run agent with
+    `ulta --no-cache` or `LOADTESTING_NO_CACHE=1 ulta`
+    '''
+                )
+                self.cancellation.notify(
+                    "The backend doesn't know this agent: agent has been deleted or account is missing loadtesting.generatorClient role.",
+                    CancellationType.FORCED,
+                )
+            else:
+                self.logger.error('Failed to report agent status', exc_info=e)
+        except BaseException:
+            pass
 
 
 class DummyStatusReporter:

@@ -42,34 +42,44 @@ def format_error(error: StateError) -> str:
     return error.message
 
 
-class Observer(State):
+class GenericObserver:
     def __init__(
         self,
+        state: State,
         logger: logging.Logger,
         cancellation: Cancellation,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
+        self._state = state
         self._logger = logger
         self._cancellation = cancellation
 
     @contextmanager
-    def observe(self, *, stage: str, critical: bool = True, exception: type | tuple[type, ...] | None = None):
-        exception = exception or Exception
+    def observe(
+        self,
+        *,
+        stage: str,
+        critical: bool = True,
+        exceptions: type | tuple[type, ...] | None = None,
+        suppress: bool = True,
+    ):
+        exceptions = exceptions or Exception
         try:
             yield
-        except exception as e:
+        except exceptions as e:
             msg = f'The error occured at "{stage}": {str(e)}'
             if critical:
                 self._logger.error('The critical error occured: %s. Notifying service termination...', msg)
                 self._cancellation.notify(msg)
             else:
                 self._logger.info('Noncritical error: %s.', msg)
-            self.error(stage, msg)
-        else:
-            self.cleanup(stage)
+            self._state.error(stage, msg)
 
-    def observe_file_system(self, stage: str = ''):
-        stage = stage or 'access file system'
-        return self.observe(stage=stage, critical=True, exception=(PermissionError, OSError))
+            if suppress:
+                return True
+            else:
+                raise
+        else:
+            self._state.cleanup(stage)

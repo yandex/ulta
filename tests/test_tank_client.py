@@ -2,6 +2,7 @@ import logging
 import pytest
 from unittest.mock import MagicMock
 from ulta.service.tank_client import TankClient
+from ulta.common.file_system import FS
 from ulta.common.job import Job, JobPluginType
 from ulta.common.job_status import AdditionalJobStatus
 
@@ -45,8 +46,8 @@ def test_parse_job_status(
     assert status.exit_code == exp_exit_code
 
 
-def test_finish_awaits_running_jobs():
-    client = TankClient(logging.getLogger(), '', '', MagicMock(), 'api_address')
+def test_finish_awaits_running_jobs(fs_mock: FS):
+    client = TankClient(logging.getLogger(), fs_mock, MagicMock(), 'api_address')
     w1, w2, f1, f2 = MagicMock(), MagicMock(), MagicMock(), MagicMock()
     client._background_workers = [w1, w2]
     client._finalizers = [f1, f2]
@@ -87,8 +88,8 @@ def test_finish_awaits_running_jobs():
         ),
     ],
 )
-def test_disable_uploaders(config, expected_patch):
-    tank_client = TankClient(logging.getLogger(), '/tmp', '/var/lock', MagicMock(), 'api_address')
+def test_disable_uploaders(config, expected_patch, fs_mock: FS):
+    tank_client = TankClient(logging.getLogger(), fs_mock, MagicMock(), 'api_address')
     job = Job(id='id', config=config)
     patch = tank_client._generate_disable_data_uploaders_patch(job)
     assert expected_patch == patch

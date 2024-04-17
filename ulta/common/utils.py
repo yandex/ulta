@@ -1,7 +1,5 @@
 import functools
 import grpc
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from google.api_core.exceptions import from_grpc_error
@@ -28,15 +26,6 @@ def normalize_path(path: Path | str | None) -> Path | str:
         return path or ''
 
     return Path(path).expanduser().absolute().as_posix()
-
-
-def ensure_dir(path: Path | str | None):
-    path = normalize_path(path)
-    if not path:
-        raise FileNotFoundError(path)
-    os.makedirs(path, exist_ok=True)
-    with tempfile.NamedTemporaryFile('a', dir=path, delete=True):
-        pass
 
 
 RETRAYABLE_LT_CLIENT_CODES = {

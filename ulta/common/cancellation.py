@@ -14,17 +14,18 @@ class CancellationType(IntEnum):
 
 class Cancellation:
     def __init__(self):
-        self._count = 0
         self._reason = ''
+        self._current_type = CancellationType.NOT_SET
         self._lock = Lock()
 
     def notify(self, reason: str, level: CancellationType = CancellationType.GRACEFUL):
         with self._lock:
-            self._count = min(self._count + level, 2)
+            if level > self._current_type:
+                self._current_type = level
             self._reason = reason
 
     def is_set(self, cancellation_type: CancellationType = CancellationType.GRACEFUL) -> bool:
-        return CancellationType(self._count) >= cancellation_type
+        return CancellationType(self._current_type) >= cancellation_type
 
     def raise_on_set(self, cancellation_type: CancellationType = CancellationType.GRACEFUL) -> bool:
         if self.is_set(cancellation_type=cancellation_type):

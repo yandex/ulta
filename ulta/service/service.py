@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterable
 
 from ulta.common.ammo import Ammo
@@ -22,8 +23,10 @@ from ulta.common.exceptions import (
     JobNotExecutedError,
     JobStoppedError,
 )
+from ulta.common.file_system import ensure_dir
 from ulta.common.job import Job, JobResult, ArtifactSettings
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
+from ulta.common.state import State, GenericObserver
 from ulta.service.artifact_uploader import ArtifactUploader
 from ulta.service.tank_client import TankClient, TankStatus, INTERNAL_ERROR_TYPE
 
@@ -35,10 +38,11 @@ class UltaService:
     def __init__(
         self,
         logger: logging.Logger,
+        state: State,
         loadtesting_client: LoadtestingClient,
         tank_client: TankClient,
         s3_client: S3Client,
-        work_dir: str,
+        tmp_dir: Path,
         sleep_time: float,
         artifact_uploaders: Iterable[NamedService[ArtifactUploader]],
         cancellation: Cancellation,
@@ -46,7 +50,7 @@ class UltaService:
     ):
         self.logger = logger
         self.cancellation = cancellation
-        self.work_dir = work_dir
+        self.tmp_dir = tmp_dir
 
         self.loadtesting_client = loadtesting_client
         self.s3_client = s3_client
@@ -56,6 +60,7 @@ class UltaService:
         self.artifact_uploaders = artifact_uploaders
         self.max_waiting_time = max_waiting_time
         self._override_status: TankStatus | None = None
+        self._observer = GenericObserver(state, logger, cancellation)
 
     def get_tank_status(self) -> TankStatus:
         if self._override_status is not None:
@@ -132,12 +137,11 @@ class UltaService:
 
         job = Job(id=job_message.id)
         try:
+            test_data_dir = ensure_dir(self.tmp_dir / f'test_data_{job_message.id}')
             job.log_group_id = job_message.logging_log_group_id
             job.config = json.loads(job_message.config)
-            job.test_data_dir = os.path.abspath(os.path.join(self.work_dir, f'test_data_{job_message.id}'))
+            job.test_data_dir = test_data_dir.absolute().as_posix()
             job.upload_artifact_settings = self.extract_artifact_settings(job_message)
-
-            os.makedirs(job.test_data_dir, exist_ok=True)
             job.ammos = self._extract_ammo(job_message, job.test_data_dir)
             return job
         except json.JSONDecodeError as error:
@@ -173,8 +177,9 @@ class UltaService:
     def wait_for_a_job(self) -> Job:
         while True:
             self.cancellation.raise_on_set()
-            if job := self.get_job():
-                return job
+            with self._observer.observe(stage='request new test from backend', suppress=False):
+                if job := self.get_job():
+                    return job
             time.sleep(self.job_pooling_delay)
 
     def await_tank_is_ready(self, timeout=60):
@@ -296,13 +301,9 @@ class UltaService:
         finally:
             self._override_status = None
 
-    @contextmanager
     def sustain_job(self):
-        try:
-            yield
-        except (*LOADTESTING_UNAVAILABLE_ERRORS, InternalServerError):
-            self.logger.exception('Request to backend failed. Retrying...')
-            return True
+        exceptions = (*LOADTESTING_UNAVAILABLE_ERRORS, InternalServerError)
+        return self._observer.observe(stage='execute test', critical=False, exceptions=exceptions, suppress=True)
 
     @contextmanager
     def sustain_service(self):

@@ -42,15 +42,16 @@ def setup_cancellation(logger: logging.Logger) -> Cancellation:
     cancellation = Cancellation()
 
     def terminate(signo, *args):
-        cancellation.notify(f'Received signal: {signal.Signals(signo).name}')
         if cancellation.is_set(CancellationType.FORCED):
             logger.warning('Received signal: %s. Terminating service', signal.Signals(signo).name)
         elif cancellation.is_set(CancellationType.GRACEFUL):
+            cancellation.notify(f'Received signal: {signal.Signals(signo).name}', CancellationType.FORCED)
+            logger.warning('Received duplicate signal: %s. Terminating...', signal.Signals(signo).name)
+        else:
+            cancellation.notify(f'Received signal: {signal.Signals(signo).name}', CancellationType.GRACEFUL)
             logger.warning(
                 'Received signal: %s. Awaiting current job to finish and terminating...', signal.Signals(signo).name
             )
-        else:
-            logger.warning('Received signal: %s. Terminating...', signal.Signals(signo).name)
 
     signal.signal(signal.SIGINT, terminate)
     signal.signal(signal.SIGTERM, terminate)

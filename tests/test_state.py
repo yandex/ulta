@@ -1,7 +1,7 @@
 import logging
 import pytest
 from ulta.common.cancellation import Cancellation
-from ulta.common.state import State, Observer
+from ulta.common.state import State, GenericObserver
 
 
 @pytest.mark.parametrize(
@@ -64,39 +64,42 @@ def test_state_can_handle_duplicate_errors():
 
 def test_observer_default_catch_exception():
     cancellation = Cancellation()
-    o = Observer(logging.getLogger(), cancellation)
+    state = State()
+    o = GenericObserver(state, logging.getLogger(), cancellation)
     with o.observe(stage='somethin important here'):
         raise Exception('first exception')
-    assert o.ok is False
+    assert state.ok is False
     assert cancellation.is_set() is True
 
     with o.observe(stage='somethin important here'):
         pass
-    assert o.ok is True
+    assert state.ok is True
     assert cancellation.is_set() is True
 
 
 def test_observer_default_catch_custom_exception():
     cancellation = Cancellation()
-    o = Observer(logging.getLogger(), cancellation)
-    with o.observe(stage='somethin important here', exception=OSError):
+    state = State()
+    o = GenericObserver(state, logging.getLogger(), cancellation)
+    with o.observe(stage='somethin important here', exceptions=OSError):
         raise FileNotFoundError('first exception')
-    assert o.ok is False
+    assert state.ok is False
     assert cancellation.is_set() is True
     with pytest.raises(Exception, match='second exception'):
-        with o.observe(stage='somethin very important here', exception=OSError):
+        with o.observe(stage='somethin very important here', exceptions=OSError):
             raise Exception('second exception')
 
 
 def test_observer_do_not_cancel_on_noncrit():
     cancellation = Cancellation()
-    o = Observer(logging.getLogger(), cancellation)
+    state = State()
+    o = GenericObserver(state, logging.getLogger(), cancellation)
     with o.observe(stage='somethin noncritical here', critical=False):
         raise Exception('first exception')
-    assert o.ok is False
+    assert state.ok is False
     assert cancellation.is_set() is False
 
     with o.observe(stage='somethin noncritical here', critical=False):
         pass
-    assert o.ok is True
+    assert state.ok is True
     assert cancellation.is_set() is False

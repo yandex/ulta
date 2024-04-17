@@ -3,11 +3,13 @@ import logging
 import sys
 import traceback
 
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import patch, mock_open
 from yandextank.core.tankcore import JobsStorage
 
 from ulta.common.agent import AgentInfo
 from ulta.common.ammo import Ammo
+from ulta.common.file_system import FS, FileSystemObserver
 from ulta.service.service import UltaService
 from ulta.service.status_reporter import StatusReporter
 from ulta.service.tank_client import TankClient
@@ -176,6 +178,18 @@ def patch_s3_uploader_collect_artifacts():
 def patch_s3_uploader_upload_artifacts():
     with patch.object(S3ArtifactUploader, '_upload_artifacts') as p:
         yield p
+
+
+@pytest.fixture()
+def fs_mock():
+    with patch.object(FileSystemObserver, '_get_fs_usage_native', return_value={'/tmp': None}):
+        with patch('builtins.open', mock_open()):
+            with patch('os.mkdir'):
+                yield FS(
+                    tmp_dir=Path('/tmp'),
+                    tests_dir=Path('/tmp'),
+                    lock_dir=Path('/tmp'),
+                )
 
 
 @pytest.fixture()

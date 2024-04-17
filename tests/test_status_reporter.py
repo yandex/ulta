@@ -36,11 +36,11 @@ def test_report_tank_stops_on_exceptions(exception, expected_exception):
     with pytest.raises(expected_exception):
         reporter.report_tank_status(TankStatus.TANK_FAILED)
     assert not cancellation.is_set()
-    with reporter.run():
-        assert reporter._stop_event is not None
-        reporter._stop_event.wait(3)
+    with reporter.run() as stopper:
+        assert stopper is not None
+        stopper.wait(3)
     assert cancellation.is_set()
-    assert reporter._stop_event.is_set()
+    assert stopper.is_set()
     loadtesting_client.claim_tank_status.assert_called_with(
         TankStatus.STOPPED.name,
         "The backend doesn't know this agent: agent has been deleted or account is missing loadtesting.generatorClient role.",

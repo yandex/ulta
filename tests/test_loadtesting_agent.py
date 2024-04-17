@@ -90,9 +90,7 @@ def test_external_agent_registration(patch_agent_registration_stub_external_regi
 
 @pytest.mark.usefixtures('patch_agent_registration_stub')
 def test_external_agent_registration_fail():
-    with patch.object(LoadtestingAgentService, '_load_agent_id') as load_agent_id:
-        load_agent_id.return_value = None
-        with pytest.raises(AgentOriginError):
-            _ = LoadtestingAgentService(
-                logging.getLogger(), MagicMock(), agent_origin=AgentOrigin.EXTERNAL, agent_name='persistent'
-            ).register()
+    with pytest.raises(AgentOriginError):
+        _ = LoadtestingAgentService(
+            logging.getLogger(), MagicMock(), agent_origin=AgentOrigin.EXTERNAL, agent_name='persistent'
+        ).register()
