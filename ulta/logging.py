@@ -8,13 +8,20 @@ from ulta.common.config import UltaConfig
 
 
 def create_default_logger(config: UltaConfig):
+    handlers = []
     if config.logging_path:
-        handlers = [
-            _create_file_handler(config.logging_path),
-            _create_stdout_handler(logging.WARNING),
-        ]
-    else:
-        handlers = [_create_stdout_handler()]
+        try:
+            handlers.append(_create_file_handler(config.logging_path))
+        except Exception as e:
+            try:
+                sys.stderr.write(f'Unable to create file logger: {str(e)}\n')
+                sys.stderr.flush()
+            except Exception:
+                pass
+
+    stdout_log_level = logging.WARNING if handlers else None
+    handlers.append(_create_stdout_handler(stdout_log_level))
+
     logger = _init_logger(logging.getLogger('ulta'), handlers, logging.getLevelName(config.logging_level))
     logger.info('Log file created')
     return logger
@@ -32,7 +39,7 @@ def _init_logger(logger: logging.Logger, handlers: Iterable[logging.Handler], le
 
 
 def _create_file_handler(log_file_path: str):
-    if os.path.dirname(log_file_path) == log_file_path:
+    if os.path.isdir(log_file_path) or os.path.dirname(log_file_path) + '/' == log_file_path:
         log_file_path = os.path.join(log_file_path, 'ulta.log')
     os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
     open(log_file_path, 'a').close()
@@ -41,7 +48,7 @@ def _create_file_handler(log_file_path: str):
     return logging.FileHandler(log_file_path)
 
 
-def _create_stdout_handler(level=None):
+def _create_stdout_handler(level: int | None = None):
     handler = logging.StreamHandler(sys.stdout)
     if level is not None:
         handler.setLevel(level)
