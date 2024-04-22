@@ -499,7 +499,7 @@ def test_serve_job_sustain_non_critical_lt_errors(
     with patch.object(UltaService, mock_failure, test_scenario) as mock:
         mock.side_effect = test_scenario
         job = Job(id='123', config={'plugin': {'enabled': True}})
-        ulta_service.sleep_time = 0.1
+        ulta_service.sleep_time = 0.01
         ulta_service.serve_lt_job(job)
 
     assert not scenario
