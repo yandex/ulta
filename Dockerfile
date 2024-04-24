@@ -1,6 +1,6 @@
 FROM cr.yandex/mirror/ubuntu:22.04 AS builder
 ARG VERSION
-ARG FEATURES=phantom,pandora,telegraf
+ARG FEATURES=pandora,telegraf
 
 RUN mkdir -p /etc/yandex-tank /var/lib/ulta /var/log/ulta
 COPY build_files/yandextank_base_config/ /etc/yandex-tank/
