@@ -79,7 +79,7 @@ install_telegraf() {
 install_jmeter() {
     JMETER_VERSION="5.5"
     apt-get install -y openjdk-8-jdk
-    curl -fS -L --connect-time 3 --retry 10 https://downloads.apache.org//jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz -o ${TMPDIR}/apache-jmeter.tgz
+    curl -fS -L --connect-time 3 --retry 10 https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz -o ${TMPDIR}/apache-jmeter.tgz
     tar zxvf ${TMPDIR}/apache-jmeter.tgz -C /usr/local/lib/
 
     JMETER_HOME="/usr/local/lib/apache-jmeter-${JMETER_VERSION}"
