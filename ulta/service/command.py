@@ -80,7 +80,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
                 return result.exit_code
             else:
                 service.serve()
-    return 0
+    return 0 if service_state.ok else 1
 
 
 def _register_loadtesting_agent(
