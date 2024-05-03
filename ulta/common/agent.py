@@ -20,7 +20,7 @@ class AgentInfo:
         return self.origin == AgentOrigin.EXTERNAL
 
     def is_anonymous_external_agent(self) -> bool:
-        return bool(self.is_external() and not self.name and self.folder_id)
+        return bool(self.is_external() and not self.name)
 
     def is_persistent_external_agent(self) -> bool:
         return bool(self.is_external() and self.name and self.folder_id)

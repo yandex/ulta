@@ -2,11 +2,9 @@ import logging
 
 from ulta.common.cancellation import Cancellation
 from ulta.common.config import UltaConfig
-from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
+from ulta.common.interfaces import NamedService, TransportFactory
 from ulta.service.loadtesting_agent_service import (
-    create_loadtesting_agent_service,
-    try_store_agent_id,
-    try_read_agent_id,
+    register_loadtesting_agent,
 )
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.log_uploader_service import LogUploaderService
@@ -26,7 +24,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
     transport_factory = TransportFactory.get(config)
     observer = GenericObserver(service_state, logger, cancellation)
 
-    agent = _register_loadtesting_agent(config, transport_factory, observer, logger)
+    agent = register_loadtesting_agent(config, transport_factory.create_agent_client(), observer, logger)
     loadtesting_client = transport_factory.create_loadtesting_client(agent)
 
     tank_client = TankClient(
@@ -81,28 +79,3 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
             else:
                 service.serve()
     return 0 if service_state.ok else 1
-
-
-def _register_loadtesting_agent(
-    config: UltaConfig,
-    transport_factory: ClientFactory,
-    observer: GenericObserver,
-    logger: logging.Logger,
-):
-    agent_id = None
-    if not config.no_cache and config.agent_id_file:
-        with observer.observe(stage='load cached agent id from file'):
-            agent_id = try_read_agent_id(config.agent_id_file, logger)
-    loadtesting_agent = create_loadtesting_agent_service(
-        config=config, agent_client=transport_factory.create_agent_client(), agent_id=agent_id, logger=logger
-    )
-
-    with observer.observe(stage="register agent in service"):
-        loadtesting_agent.register()
-
-    agent = loadtesting_agent.agent
-    if not config.no_cache and config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
-        with observer.observe(stage='cache agent id to file'):
-            try_store_agent_id(agent.id, config.agent_id_file)
-
-    return loadtesting_agent.agent

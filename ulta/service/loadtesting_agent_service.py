@@ -5,6 +5,7 @@ from ulta.common.agent import AgentInfo, AgentOrigin
 from ulta.common.config import UltaConfig
 from ulta.common.file_system import ensure_dir
 from ulta.common.interfaces import AgentClient
+from ulta.common.state import GenericObserver
 
 ANONYMOUS_AGENT_ID = None
 
@@ -13,76 +14,59 @@ class AgentOriginError(Exception):
     pass
 
 
-class LoadtestingAgentService(object):
-    def __init__(
-        self,
-        logger: logging.Logger,
-        agent_client: AgentClient,
-        agent_origin: AgentOrigin | None = None,
-        agent_id: str | None = None,
-        agent_name: str | None = None,
-        agent_version: str | None = None,
-        folder_id: str | None = None,
-        compute_instance_id: str | None = None,
-        instance_lt_created: bool = False,
-    ):
-        self.logger = logger
-        self.agent_client = agent_client
-        self.compute_instance_id = compute_instance_id
-        self.instance_lt_created = bool(instance_lt_created)
-        self.folder_id = folder_id
-        self.agent = AgentInfo(
-            id=agent_id,
-            name=agent_name,
-            version=agent_version,
-            origin=agent_origin or self._identify_agent_origin(),
-            folder_id=folder_id,
+def register_loadtesting_agent(
+    config: UltaConfig,
+    agent_client: AgentClient,
+    observer: GenericObserver,
+    logger: logging.Logger,
+):
+    agent = make_agent_info_from_config(config)
+    if agent.is_persistent_external_agent() and not config.no_cache and config.agent_id_file:
+        with observer.observe(stage='load cached agent id from file'):
+            agent.id = try_read_agent_id(config.agent_id_file, logger)
+
+    with observer.observe(stage="register agent in service"):
+        agent.id = agent.id or _identify_agent_id(agent, agent_client, logger)
+
+    if not config.no_cache and config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
+        with observer.observe(stage='cache agent id to file'):
+            try_store_agent_id(agent.id, config.agent_id_file)
+
+    return agent
+
+
+def _identify_agent_id(agent: AgentInfo, agent_client: AgentClient, logger: logging.Logger) -> str | None:
+    if agent.origin is AgentOrigin.COMPUTE_LT_CREATED:
+        agent_instance_id = agent_client.register_agent()
+        logger.info('The agent has been registered with id(%s)', agent_instance_id)
+        return agent_instance_id
+
+    if agent.is_persistent_external_agent():
+        agent_instance_id = agent_client.register_external_agent(folder_id=agent.folder_id, name=agent.name)
+        logger.info('The agent has been registered with id(%s)', agent_instance_id)
+        return agent_instance_id
+    elif agent.is_anonymous_external_agent():
+        logger.info('The agent is anonymous agent')
+        return ANONYMOUS_AGENT_ID
+    else:
+        raise AgentOriginError(
+            'Unable to identify agent id. If you running external agent ensure folder id and service account key are provided'
         )
-        self._agent_registered = False
-
-    def register(self) -> AgentInfo:
-        if not self._agent_registered:
-            self.agent.id = self.agent.id or self._identify_agent_id()
-            self._agent_registered = True
-        return self.agent
-
-    def _identify_agent_origin(self) -> AgentOrigin:
-        if self.instance_lt_created and self.compute_instance_id:
-            return AgentOrigin.COMPUTE_LT_CREATED
-        return AgentOrigin.EXTERNAL
-
-    def _identify_agent_id(self) -> str | None:
-        if self.agent.origin is AgentOrigin.COMPUTE_LT_CREATED:
-            agent_instance_id = self.agent_client.register_agent()
-            self.logger.info('The agent has been registered with id(%s)', agent_instance_id)
-            return agent_instance_id
-
-        if self.agent.is_persistent_external_agent():
-            agent_instance_id = self.agent_client.register_external_agent(
-                folder_id=self.folder_id, name=self.agent.name
-            )
-            self.logger.info('The agent has been registered with id(%s)', agent_instance_id)
-            return agent_instance_id
-        elif self.agent.is_anonymous_external_agent():
-            return ANONYMOUS_AGENT_ID
-        else:
-            raise AgentOriginError(
-                'Unable to identify agent id. If you running external agent ensure folder id and service account key are provided'
-            )
 
 
-def create_loadtesting_agent_service(
-    config: UltaConfig, agent_client: AgentClient, agent_id: str | None, logger: logging.Logger
-) -> LoadtestingAgentService:
-    return LoadtestingAgentService(
-        logger,
-        agent_client,
-        agent_id=agent_id,
-        agent_name=config.agent_name,
+def _identify_agent_origin(config: UltaConfig) -> AgentOrigin:
+    if config.instance_lt_created and config.compute_instance_id:
+        return AgentOrigin.COMPUTE_LT_CREATED
+    return AgentOrigin.EXTERNAL
+
+
+def make_agent_info_from_config(config: UltaConfig):
+    return AgentInfo(
+        id='',
+        name=config.agent_name,
+        version=config.agent_version,
+        origin=_identify_agent_origin(config),
         folder_id=config.folder_id,
-        compute_instance_id=config.compute_instance_id,
-        agent_version=config.agent_version,
-        instance_lt_created=config.instance_lt_created,
     )
 
 

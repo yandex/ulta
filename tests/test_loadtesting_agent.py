@@ -4,8 +4,9 @@ import pytest
 from unittest.mock import patch, MagicMock
 from google.protobuf.any_pb2 import Any
 
+from ulta.common.agent import AgentInfo
 from ulta.service.loadtesting_agent_service import (
-    LoadtestingAgentService,
+    _identify_agent_id,
     AgentOrigin,
     AgentOriginError,
 )
@@ -49,12 +50,16 @@ def test_agent_send_version_on_greet(patch_agent_registration_stub_register):
     )
 
     agent_client = YCAgentClient(version, MagicMock(), MagicMock())
-    lt = LoadtestingAgentService(
-        logging.getLogger(), agent_client, agent_origin=AgentOrigin.COMPUTE_LT_CREATED, agent_version=version
+    agent = AgentInfo(
+        id=None,
+        name='some name',
+        folder_id='folder_id',
+        origin=AgentOrigin.COMPUTE_LT_CREATED,
+        version=version,
     )
-    agent = lt.register()
+    agent_id = _identify_agent_id(agent, agent_client, logging.getLogger())
 
-    assert agent.id == 'abc'
+    assert agent_id == 'abc'
     patch_agent_registration_stub_register.assert_called_once()
     _, kwargs = patch_agent_registration_stub_register.call_args
     assert 'metadata' in kwargs
@@ -72,16 +77,16 @@ def test_external_agent_registration(patch_agent_registration_stub_external_regi
     auth_metadata = ('authorization', 'some token')
     token_provider.get_auth_metadata.return_value = auth_metadata
     agent_client = YCAgentClient(version, MagicMock(), token_provider)
-    lt = LoadtestingAgentService(
-        logging.getLogger(),
-        agent_client,
-        agent_origin=AgentOrigin.EXTERNAL,
-        agent_name='agent_name',
+    agent = AgentInfo(
+        id=None,
+        name='agent_name',
         folder_id='folder_id',
-        agent_version=version,
+        origin=AgentOrigin.EXTERNAL,
+        version=version,
     )
-    agent = lt.register()
-    assert agent.id == 'abc-ext'
+
+    agent_id = _identify_agent_id(agent, agent_client, logging.getLogger())
+    assert agent_id == 'abc-ext'
     patch_agent_registration_stub_external_register.assert_called_once()
     actual_request, kwargs = patch_agent_registration_stub_external_register.call_args
     assert actual_request[0].agent_version == version
@@ -91,6 +96,35 @@ def test_external_agent_registration(patch_agent_registration_stub_external_regi
 @pytest.mark.usefixtures('patch_agent_registration_stub')
 def test_external_agent_registration_fail():
     with pytest.raises(AgentOriginError):
-        _ = LoadtestingAgentService(
-            logging.getLogger(), MagicMock(), agent_origin=AgentOrigin.EXTERNAL, agent_name='persistent'
-        ).register()
+        agent = AgentInfo(
+            id=None,
+            name='persistent',
+            folder_id=None,
+            origin=AgentOrigin.EXTERNAL,
+            version=None,
+        )
+        _ = _identify_agent_id(agent, MagicMock(), logging.getLogger())
+
+
+@pytest.mark.parametrize(
+    'name, folder_id, is_anonymous, is_persistent',
+    [
+        (None, None, True, False),
+        ('', '', True, False),
+        ('some name', None, False, False),
+        (None, 'folder_id', True, False),
+        ('some name', 'folder_id', False, True),
+    ],
+)
+def test_agent_state(name, folder_id, is_anonymous, is_persistent):
+    agent = AgentInfo(
+        id=None,
+        name=name,
+        version='1.0.0',
+        origin=AgentOrigin.EXTERNAL,
+        folder_id=folder_id,
+    )
+
+    assert agent.is_external() is True
+    assert agent.is_anonymous_external_agent() == is_anonymous
+    assert agent.is_persistent_external_agent() == is_persistent

@@ -1,6 +1,5 @@
-from ulta.common.config import UltaConfig
+from ulta.common.config import ExternalConfigLoader, UltaConfig
 from ulta.yc.ycloud import get_instance_metadata, get_instance_yandex_metadata, METADATA_AGENT_VERSION_ATTR
-from ulta.common.config import ExternalConfigLoader
 
 YANDEX_COMPUTE = 'YANDEX_CLOUD_COMPUTE'
 
@@ -30,12 +29,12 @@ class YandexCloudConfigLoader(ExternalConfigLoader):
             attrs.get(METADATA_LOGGING_HOST_ATTR), attrs.get(METADATA_LOGGING_PORT_ATTR)
         )
         config.object_storage_url = attrs.get(METADATA_OBJECT_STORAGE_URL_ATTR)
-        config.request_frequency = int(attrs.get(METADATA_REQUEST_FREQUENCY, 0))
+        config.request_frequency = _get_and_convert(attrs.get(METADATA_REQUEST_FREQUENCY), int)
         config.compute_instance_id = metadata.get('id')
-        config.agent_version = attrs.get(METADATA_AGENT_VERSION_ATTR, '')
-        config.instance_lt_created = attrs.get(METADATA_LT_CREATED_ATTR, False)
-        config.agent_name = attrs.get(METADATA_AGENT_NAME_ATTR, '')
-        config.folder_id = attrs.get(METADATA_FOLDER_ID_ATTR, yandex_metadata.get(YANDEX_METADATA_FOLDER_ID_ATTR, ''))
+        config.agent_version = attrs.get(METADATA_AGENT_VERSION_ATTR)
+        config.instance_lt_created = _get_and_convert(attrs.get(METADATA_LT_CREATED_ATTR), bool)
+        config.agent_name = attrs.get(METADATA_AGENT_NAME_ATTR)
+        config.folder_id = attrs.get(METADATA_FOLDER_ID_ATTR, yandex_metadata.get(YANDEX_METADATA_FOLDER_ID_ATTR))
 
     @classmethod
     def should_apply(cls, environment: str) -> bool:
@@ -44,6 +43,12 @@ class YandexCloudConfigLoader(ExternalConfigLoader):
     @classmethod
     def env_type(cls) -> str:
         return YANDEX_COMPUTE
+
+
+def _get_and_convert(value, cast):
+    if value is None:
+        return None
+    return cast(value)
 
 
 def build_backend_url(host, port):
