@@ -6,7 +6,7 @@ from pathlib import Path
 from ulta.common.cancellation import Cancellation, CancellationRequest
 from ulta.common.exceptions import ArtifactUploadError
 from ulta.common.job import Job, ArtifactSettings
-from ulta.service.artifact_uploader import _relative_to, ROOT_SEGMENT, S3ArtifactUploader
+from ulta.service.artifact_uploader import _relative_to, ROOT_SEGMENT, S3ArtifactUploader, ArtifactCollector
 
 
 TEST_FOLDER_PATH = 'test_artifact/test_folder/'
@@ -75,7 +75,7 @@ def test__relative_to(root, path, expected):
 )
 @pytest.mark.usefixtures('patch_cwd')
 def test_collect_files(dir_path, filter_include, filter_exclude, expected):
-    uploader = S3ArtifactUploader(MagicMock(), MagicMock(), Cancellation(), logging.getLogger())
+    uploader = ArtifactCollector(logging.getLogger())
     actual = uploader._collect_files(Path(dir_path), filter_include, filter_exclude)
     actual = [normalize_for_test(p, dir_path) for p in actual]
     assert not (set(actual) - set(expected)), 'Actual contains excess items: %s' % (set(actual) - set(expected))

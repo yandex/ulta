@@ -41,7 +41,9 @@ class S3ArtifactUploader(ArtifactUploader):
 
         try:
             self.cancellation.raise_on_set(CancellationType.FORCED)
-            artifacts = self.collect_artifacts(job.upload_artifact_settings, job.artifact_dir_path)
+            artifacts = ArtifactCollector(self.logger).collect_artifacts(
+                job.upload_artifact_settings, job.artifact_dir_path
+            )
             self._upload_artifacts(artifacts, job.upload_artifact_settings.output_bucket)
         except (ArtifactUploadError, CancellationRequest):
             raise
@@ -65,6 +67,11 @@ class S3ArtifactUploader(ArtifactUploader):
         if errors:
             msg = '\n'.join([str(e) for e in errors])
             raise ArtifactUploadError(f'Failed to upload one or more artifacts to s3: {msg}')
+
+
+class ArtifactCollector:
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
 
     def _filter_readable(self, paths: Iterable[Path]) -> Generator[Path, None, None]:
         for path in paths:

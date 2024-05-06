@@ -14,7 +14,7 @@ from ulta.service.service import UltaService
 from ulta.service.status_reporter import StatusReporter
 from ulta.service.tank_client import TankClient
 from ulta.service.log_uploader_service import LogUploaderService
-from ulta.service.artifact_uploader import S3ArtifactUploader
+from ulta.service.artifact_uploader import S3ArtifactUploader, ArtifactCollector
 from ulta.yc.backend_client import YCLoadtestingClient
 from ulta.yc.s3_client import YCS3Client
 
@@ -170,7 +170,7 @@ def patch_log_uploader_send_logs():
 
 @pytest.fixture()
 def patch_s3_uploader_collect_artifacts():
-    with patch.object(S3ArtifactUploader, 'collect_artifacts') as p:
+    with patch.object(ArtifactCollector, 'collect_artifacts') as p:
         yield p
 
 
