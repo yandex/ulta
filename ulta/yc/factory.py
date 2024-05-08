@@ -37,6 +37,9 @@ class YCFactory(ClientFactory):
         self.channels = ChannelFactory()
         self.config = config
 
+    def get_iam_token(self) -> str:
+        return self.token_provider.get_token()
+
     def create_agent_client(self) -> YCAgentClient:
         return YCAgentClient(
             self.config.agent_version,

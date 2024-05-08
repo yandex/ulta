@@ -1,8 +1,9 @@
 import logging
+import typing
 
 from ulta.common.cancellation import Cancellation
 from ulta.common.config import UltaConfig
-from ulta.common.interfaces import NamedService, TransportFactory
+from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
 from ulta.service.loadtesting_agent_service import (
     register_loadtesting_agent,
 )
@@ -13,7 +14,7 @@ from ulta.common.file_system import make_fs_from_ulta_config, FileSystemObserver
 from ulta.common.healthcheck import HealthCheck
 from ulta.common.state import State, GenericObserver
 from ulta.service.status_reporter import StatusReporter, DummyStatusReporter
-from ulta.service.tank_client import TankClient
+from ulta.service.tank_client import TankClient, TankVariables
 
 MIN_SLEEP_TIME = 1
 
@@ -32,6 +33,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
         fs=fs,
         loadtesting_client=transport_factory.create_job_data_uploader_client(agent),
         data_uploader_api_address=config.backend_service_url,
+        variables=_get_tank_variables(transport_factory),
     )
 
     sleep_time = max(config.request_frequency, MIN_SLEEP_TIME)
@@ -79,3 +81,13 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
             else:
                 service.serve()
     return 0 if service_state.ok else 1
+
+
+def _get_tank_variables(transport_factory: ClientFactory):
+    cloud_token_getter: typing.Callable[[], str] | None = None
+    if hasattr(transport_factory, 'get_iam_token'):
+        token_getter_candidate = getattr(transport_factory, 'get_iam_token')
+        if isinstance(token_getter_candidate, typing.Callable):
+            cloud_token_getter = token_getter_candidate
+
+    return TankVariables(token_getter=cloud_token_getter)

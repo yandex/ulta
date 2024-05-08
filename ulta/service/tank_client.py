@@ -1,7 +1,9 @@
 import multiprocessing
 import inspect
 import logging
+import os
 import yaml
+from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 from typing import Iterable, Protocol, Callable
@@ -50,6 +52,13 @@ class TankStatusProvider(Protocol):
         ...
 
 
+@dataclass
+class TankVariables:
+    # using token_getter to pass YC iam token into tank plugins
+    # token has expiration date, so we need getter here to get valid token for each tank launch
+    token_getter: Callable[[], str] | None = None
+
+
 class TankClient:
     _resource_manager_factory = None
 
@@ -60,6 +69,7 @@ class TankClient:
         loadtesting_client: JobDataUploaderClient,
         data_uploader_api_address: str,
         tank_worker_timeout: int = TANK_WORKER_TIMEOUT,
+        variables: TankVariables | None = None,
     ):
         self.logger = logger
         self.fs = fs
@@ -71,6 +81,7 @@ class TankClient:
         self._background_workers: list[JobBackgroundWorker] = []
         self._finalizers: list[JobFinalizer] = []
         self._tank_worker_timeout = tank_worker_timeout
+        self._variables = variables
 
     def _generate_job_config_patches(self, job: Job) -> list:
         patch = {
@@ -103,12 +114,23 @@ class TankClient:
             yaml.dump(job.config, f)
             return f.name
 
+    def _prepare_tank_variables(self):
+        if (
+            self._variables is not None
+            and self._variables.token_getter is not None
+            and 'LOADTESTING_YC_TOKEN' not in os.environ
+        ):
+            os.environ['LOADTESTING_YC_TOKEN'] = self._variables.token_getter()
+
     def prepare_job(self, job: Job, files: Iterable[str]) -> Job:
         if self._is_test_session_running():
             raise TankError('Another test is already running')
 
         patches = self._generate_job_config_patches(job)
         tank_config_path = self.dump_job_config(job)
+
+        # temporary workaround to pass yc token to YCMonitoring plugin
+        self._prepare_tank_variables()
         try:
             self._tank_worker_start_shooting_event = multiprocessing.Event()
             self.tank_worker = TankWorker(
