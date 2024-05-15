@@ -63,7 +63,7 @@ install_phantom() {
 
 install_pandora() {
     install_curl
-    PANDORA_BINARY="https://github.com/yandex/pandora/releases/download/v0.5.20/pandora_0.5.20_linux_amd64"
+    PANDORA_BINARY="https://github.com/yandex/pandora/releases/download/v0.5.24/pandora_0.5.24_linux_amd64"
     curl -fS -L --connect-time 3 --max-time 30 --retry 10 "${PANDORA_BINARY}" -o /usr/local/bin/pandora || log_fatal "Can't download pandora"
     chmod +x /usr/local/bin/pandora
     mkdir -p /usr/share/doc/pandora
@@ -101,7 +101,7 @@ install_jmeter() {
     ${JMETER_HOME}/bin/PluginsManagerCMD.sh install "${JMETER_PLUGINS}"
     mkdir -p /etc/yandex-tank
     printf "jmeter:\n  jmeter_path: ${JMETER_HOME}/bin/jmeter\n  jmeter_ver: ${JMETER_VERSION}\n" > /etc/yandex-tank/10-jmeter.yaml
-    
+
 }
 
 highload_twick() {
