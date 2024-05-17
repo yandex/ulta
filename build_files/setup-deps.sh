@@ -63,7 +63,7 @@ install_phantom() {
 
 install_pandora() {
     install_curl
-    PANDORA_BINARY="https://github.com/yandex/pandora/releases/download/v0.5.24/pandora_0.5.24_linux_amd64"
+    PANDORA_BINARY="https://github.com/yandex/pandora/releases/download/v0.5.25/pandora_0.5.25_linux_amd64"
     curl -fS -L --connect-time 3 --max-time 30 --retry 10 "${PANDORA_BINARY}" -o /usr/local/bin/pandora || log_fatal "Can't download pandora"
     chmod +x /usr/local/bin/pandora
     mkdir -p /usr/share/doc/pandora
