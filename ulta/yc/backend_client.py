@@ -39,8 +39,9 @@ class YCLoadtestingClient:
     @retry_lt_client_call
     def claim_tank_status(self, tank_status: str, status_message: str | None):
         # TODO return status and error message
-        # TODO send status_message to backend when public api is available
-        request = agent_service_pb2.ClaimAgentStatusRequest(agent_instance_id=self.agent_id, status=tank_status)
+        request = agent_service_pb2.ClaimAgentStatusRequest(
+            agent_instance_id=self.agent_id, status=tank_status, status_message=status_message
+        )
         result = self.stub_agent.ClaimStatus(request, timeout=self.timeout, metadata=self._request_metadata())
         return result.code
 
