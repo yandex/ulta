@@ -20,7 +20,7 @@ analytic tools for the results they produce.
     install_requires=[
         'requests>=2.31.0',
         'pyyaml>=5.4',
-        'grpcio',
+        'grpcio==1.63.0',
         'grpcio-tools',
         'PyJWT',
         'yandextank>=2.0.0',
