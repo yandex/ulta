@@ -34,9 +34,11 @@ class FilesystemCleanup:
         self._netort_cache_ttl = netort_cache_ttl
 
         self._forbiden_dirs = {self._stpd_cache_dir, self._fs.tests_dir, self._fs.tmp_dir}
-        for path in (self._job.test_data_dir, self._job.artifact_dir_path):
-            if path:
-                self._forbiden_dirs.add(Path(path))
+        if self._job.test_data_dir:
+            self._forbiden_dirs.add(Path(self._job.test_data_dir))
+            self._forbiden_dirs.add(Path(self._job.test_data_dir.replace('/test_data_', '/')))
+        if self._job.artifact_dir_path:
+            self._forbiden_dirs.add(Path(self._job.artifact_dir_path))
 
     def _get_job_disk_limit(self) -> int:
         if rc := self._job.get_plugins(JobPluginType.RESOURCE_CHECK):
@@ -66,6 +68,10 @@ class FilesystemCleanup:
         self._log_free_space('after', self._fs.tmp_dir)
 
     def _remove_old_tests_dirs(self):
+        if not self._fs.tests_dir.exists():
+            self._logger.debug('FilesystemCleanup: there are no tests folder')
+            return
+
         self._log_free_space('before', self._fs.tests_dir)
         tests_dirs = sorted(
             [
@@ -82,6 +88,10 @@ class FilesystemCleanup:
         self._log_free_space('after', self._fs.tests_dir)
 
     def _remove_old_stpd_cache_files(self):
+        if not self._stpd_cache_dir.exists():
+            self._logger.debug('FilesystemCleanup: there are no stpd cache folder')
+            return
+
         self._log_free_space('before', self._stpd_cache_dir)
         stpd_cache = sorted(
             [(f, f.stat().st_ctime) for f in self._stpd_cache_dir.iterdir() if f not in self._forbiden_dirs],
@@ -102,8 +112,13 @@ class FilesystemCleanup:
 
         netort_dir = Path(self._resource_manager.tmp_path_prefix)
         self._log_free_space('before', netort_dir)
+        netort_dirs = set(
+            Path(op.factory.keywords['path_provider'].prefix)
+            for op in self._resource_manager.openers
+            if hasattr(op.factory, 'keywords') and 'path_provider' in op.factory.keywords
+        )
         netort_objects = sorted(
-            [(f, f.stat().st_ctime) for f in netort_dir.rglob('*') if f.is_file()],
+            [(f, f.stat().st_ctime) for d in netort_dirs for f in d.rglob('*') if f.is_file()],
             key=lambda f: f[1],
         )
 

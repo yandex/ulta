@@ -162,28 +162,21 @@ def test_filesystem_cleanup():
     EXPECTED_RMTREE = {fs.tests_dir / 'old_id', fs.tmp_dir / 'old_id'}
     EXPECTED_UNLINK = {fs.tests_dir / 'stpd-cache/file', netort_dir / 'http' / 'file', netort_dir / 's3' / 'file'}
 
-    def mock_iterdir(self: Path):
-        return [f for f in FILES if f.parent == self]
-
-    def mock_rglob(self: Path, pattern: str):
-        return [f for f in FILES if f.is_relative_to(self)]
-
-    def mock_stat(self: Path):
-        return FILES[self]
-
     unlinked_files = set()
-
-    def mock_unlink(self: Path):
-        unlinked_files.add(self)
 
     rm_cf = ResourceManagerConfig()
     rm_cf.tmp_path = netort_dir.absolute().as_posix()
     rm = ResourceManager(rm_cf)
     with patch.object(FilesystemCleanup, '_get_free_space', return_value=0):
         with patch('shutil.rmtree') as patch_rmtree:
-            with patch.object(Path, 'unlink', new=mock_unlink), patch.object(Path, 'rglob', new=mock_rglob):
-                with patch.object(Path, 'iterdir', new=mock_iterdir), patch.object(Path, 'stat', new=mock_stat):
-                    FilesystemCleanup(logging.getLogger(), fs, job, rm).cleanup()
+            with (
+                patch.object(Path, 'unlink', new=lambda p: unlinked_files.add(p)),
+                patch.object(Path, 'rglob', new=lambda p, pattern: [f for f in FILES if f.is_relative_to(p)]),
+                patch.object(Path, 'iterdir', new=lambda p: [f for f in FILES if f.parent == p]),
+                patch.object(Path, 'stat', new=lambda p: FILES[p]),
+                patch.object(Path, 'exists', new=lambda p: p in FILES),
+            ):
+                FilesystemCleanup(logging.getLogger(), fs, job, rm).cleanup()
 
-                    assert set(arg[0][0] for arg in patch_rmtree.call_args_list) == EXPECTED_RMTREE
-                    assert unlinked_files == EXPECTED_UNLINK
+                assert set(arg[0][0] for arg in patch_rmtree.call_args_list) == EXPECTED_RMTREE
+                assert unlinked_files == EXPECTED_UNLINK
