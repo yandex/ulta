@@ -23,6 +23,8 @@ from ulta.common.interfaces import JobDataUploaderClient
 from ulta.service.data_uploader import TrailUploader, MonitoringUploader, DataPipePlugin
 from ulta.service.imbalance_detector import ImbalanceUploader, ImbalanceDetectorPlugin
 from ulta.service.interfaces import JobBackgroundWorker, JobFinalizer
+from ulta.service.filesystem_cleanup import FilesystemCleanup
+
 
 INTERNAL_ERROR_TYPE = 'internal'
 AUTOSTOP_EXIT_CODES = [
@@ -122,6 +124,12 @@ class TankClient:
         ):
             os.environ['LOADTESTING_YC_TOKEN'] = self._variables.token_getter()
 
+    def _ensure_filesystem_free_space(self, job: Job, resource_manager: ResourceManager | None):
+        try:
+            FilesystemCleanup(self.logger, self.fs, job, resource_manager).cleanup()
+        except Exception as e:
+            self.logger.error(f'Error during filesystem cleanup: {e}')
+
     def prepare_job(self, job: Job, files: Iterable[str]) -> Job:
         if self._is_test_session_running():
             raise TankError('Another test is already running')
@@ -131,6 +139,9 @@ class TankClient:
 
         # temporary workaround to pass yc token to YCMonitoring plugin
         self._prepare_tank_variables()
+
+        resource_manager = self._resource_manager_factory() if self._resource_manager_factory else None
+        self._ensure_filesystem_free_space(job, resource_manager)
         try:
             self._tank_worker_start_shooting_event = multiprocessing.Event()
             self.tank_worker = TankWorker(
@@ -139,7 +150,7 @@ class TankClient:
                 patches,
                 files=files,
                 run_shooting_event=self._tank_worker_start_shooting_event,
-                resource_manager=self._resource_manager_factory() if self._resource_manager_factory else None,
+                resource_manager=resource_manager,
                 plugins_implicit_enabling=True,
             )
             self.tank_worker.collect_files()

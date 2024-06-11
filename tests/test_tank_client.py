@@ -1,10 +1,16 @@
 import logging
+import os
+import stat
+import time
 import pytest
-from unittest.mock import MagicMock
-from ulta.service.tank_client import TankClient
-from ulta.common.file_system import FS
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+from ulta.service.tank_client import TankClient, FilesystemCleanup
+from ulta.common.config import UltaConfig
+from ulta.common.file_system import FS, make_fs_from_ulta_config
 from ulta.common.job import Job, JobPluginType
 from ulta.common.job_status import AdditionalJobStatus
+from yandextank.contrib.netort.netort.resource import ResourceManager, ResourceManagerConfig
 
 
 @pytest.mark.parametrize(
@@ -93,3 +99,91 @@ def test_disable_uploaders(config, expected_patch, fs_mock: FS):
     job = Job(id='id', config=config)
     patch = tank_client._generate_disable_data_uploaders_patch(job)
     assert expected_patch == patch
+
+
+def test_filesystem_cleanup():
+    fs = make_fs_from_ulta_config(
+        UltaConfig(
+            work_dir='/tmp/ulta_work',
+            lock_dir='/tmp/ulta_lock',
+            command='',
+            environment='',
+            transport='',
+            backend_service_url='',
+            iam_service_url='',
+            logging_service_url='',
+            object_storage_url='',
+            request_frequency=0,
+            instance_lt_created=False,
+        )
+    )
+    netort_dir = Path('/tmp/netort_cache/')
+
+    old_job = Job(
+        id='old_id',
+        config={},
+        test_data_dir=(fs.tmp_dir / 'old_id').absolute().as_posix(),
+        artifact_dir_path=(fs.tests_dir / 'old_id').absolute().as_posix(),
+    )
+    job = Job(
+        id='id',
+        config={},
+        test_data_dir=(fs.tmp_dir / 'id').absolute().as_posix(),
+        artifact_dir_path=(fs.tests_dir / 'id').absolute().as_posix(),
+    )
+
+    now = time.time()
+    ftimes_now = (now, now, now)
+    ftimes_old = (now - 86400 * 10, now - 86400 * 10, now - 86400 * 10)
+    FILES = {
+        # st_mode, st_ino, st_dev, st_nlink, st_uid, st_gid, st_size, st_atime, st_mtime, st_ctime
+        fs.tmp_dir: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tmp_dir / old_job.id: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_old)),
+        fs.tmp_dir / old_job.id / 'ammo.gz': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_old)),
+        fs.tmp_dir / old_job.id / 'config.json': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_old)),
+        fs.tmp_dir / job.id: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tmp_dir / job.id / 'ammo.gz': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tmp_dir / job.id / 'config.json': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir / old_job.id: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_old)),
+        fs.tests_dir / old_job.id / 'ammo': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_old)),
+        fs.tests_dir / old_job.id / 'config.yaml': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_old)),
+        fs.tests_dir / job.id: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir / job.id / 'ammo': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir / job.id / 'config.yaml': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir / 'stpd-cache': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir / 'stpd-cache' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
+        netort_dir: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        netort_dir / 'http': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        netort_dir / 'http' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
+        netort_dir / 's3': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        netort_dir / 's3' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
+    }
+    EXPECTED_RMTREE = {fs.tests_dir / 'old_id', fs.tmp_dir / 'old_id'}
+    EXPECTED_UNLINK = {fs.tests_dir / 'stpd-cache/file', netort_dir / 'http' / 'file', netort_dir / 's3' / 'file'}
+
+    def mock_iterdir(self: Path):
+        return [f for f in FILES if f.parent == self]
+
+    def mock_rglob(self: Path, pattern: str):
+        return [f for f in FILES if f.is_relative_to(self)]
+
+    def mock_stat(self: Path):
+        return FILES[self]
+
+    unlinked_files = set()
+
+    def mock_unlink(self: Path):
+        unlinked_files.add(self)
+
+    rm_cf = ResourceManagerConfig()
+    rm_cf.tmp_path = netort_dir.absolute().as_posix()
+    rm = ResourceManager(rm_cf)
+    with patch.object(FilesystemCleanup, '_get_free_space', return_value=0):
+        with patch('shutil.rmtree') as patch_rmtree:
+            with patch.object(Path, 'unlink', new=mock_unlink), patch.object(Path, 'rglob', new=mock_rglob):
+                with patch.object(Path, 'iterdir', new=mock_iterdir), patch.object(Path, 'stat', new=mock_stat):
+                    FilesystemCleanup(logging.getLogger(), fs, job, rm).cleanup()
+
+                    assert set(arg[0][0] for arg in patch_rmtree.call_args_list) == EXPECTED_RMTREE
+                    assert unlinked_files == EXPECTED_UNLINK

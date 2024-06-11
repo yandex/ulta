@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from strenum import StrEnum
 from functools import cached_property
-from typing import Iterable
 
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
 from ulta.common.ammo import Ammo
@@ -15,6 +14,7 @@ class JobPluginType(StrEnum):
     PHANTOM = 'yandextank.plugins.Phantom'
     PANDORA = 'yandextank.plugins.Pandora'
     JMETER = 'yandextank.plugins.JMeter'
+    RESOURCE_CHECK = 'yandextank.plugins.ResourceCheck'
 
 
 class Generator(IntEnum):
@@ -69,8 +69,7 @@ class Job:
     def plugin_enabled(self, plugin_type: JobPluginType) -> bool:
         return any(self.get_plugins(plugin_type))
 
-    def get_plugins(self, plugin_type: JobPluginType) -> Iterable[tuple[str, dict]]:
-        assert self.config is not None
+    def get_plugins(self, plugin_type: JobPluginType) -> list[tuple[str, dict]]:
         return [
             (key, plugin)
             for key, plugin in self.config.items()
