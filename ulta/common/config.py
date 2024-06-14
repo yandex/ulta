@@ -1,5 +1,5 @@
 from typing import Protocol
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 from ulta.common.config_validator import LabelKey, LabelValue
 
 DEFAULT_ENVIRONMENT = 'DEFAULT'
@@ -22,7 +22,8 @@ class UltaConfig(BaseModel):
     agent_id_file: str | None = None
     work_dir: str
     lock_dir: str
-    request_frequency: int
+    request_interval: StrictInt
+    reporter_interval: StrictInt | None = None
     logging_path: str | None = None
     logging_level: str | None = None
 

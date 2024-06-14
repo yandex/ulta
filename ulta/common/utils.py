@@ -1,5 +1,6 @@
 import functools
 import grpc
+import typing
 from datetime import datetime, timezone
 from pathlib import Path
 from google.api_core.exceptions import from_grpc_error
@@ -10,7 +11,7 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def catch_exceptions(func):
+def catch_exceptions(func: typing.Callable):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -36,7 +37,7 @@ RETRAYABLE_LT_CLIENT_CODES = {
 }
 
 
-def retry_lt_client_call(func):
+def retry_lt_client_call(func: typing.Callable):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         for attempt in Retrying(
@@ -49,3 +50,9 @@ def retry_lt_client_call(func):
                 return func(*args, **kwargs)
 
     return wrapper
+
+
+def get_and_convert(value, cast: typing.Callable[[typing.Any], typing.Any]):
+    if value is None:
+        return None
+    return cast(value)

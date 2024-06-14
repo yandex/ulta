@@ -7,7 +7,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from ulta.cli_args import CliArgs, Command, parse_str_as_key_values, parse_str_as_list_values, parse_cli_args
 from ulta.common.config import UltaConfig, DEFAULT_ENVIRONMENT, ExternalConfigLoader
-from ulta.common.utils import normalize_path
+from ulta.common.utils import normalize_path, get_and_convert
 from ulta.module import load_plugins
 from ulta.version import VERSION
 
@@ -82,7 +82,8 @@ class _ConfigBuilder:
             config.iam_service_url = 'iam.api.cloud.yandex.net:443'
             config.logging_service_url = 'ingester.logging.yandexcloud.net:443'
             config.object_storage_url = 'https://storage.yandexcloud.net'
-            config.request_frequency = 1
+            config.request_interval = 1
+            config.reporter_interval = 10
             config.logging_level = 'INFO'
             config.agent_version = VERSION
             config.no_cache = False
@@ -107,7 +108,8 @@ class _ConfigBuilder:
             config.lock_dir = content.get('lock_dir')
             config.logging_path = content.get('logging_path')
             config.logging_level = content.get('logging_level')
-            config.request_frequency = content.get('request_frequency')
+            config.request_interval = get_and_convert(content.get('request_frequency'), int)
+            config.reporter_interval = get_and_convert(content.get('reporter_interval'), int)
             config.agent_name = content.get('agent_name')
             config.folder_id = content.get('folder_id')
             config.service_account_id = content.get('service_account_id')

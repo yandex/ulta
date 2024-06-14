@@ -9,6 +9,7 @@ lock_dir: '/var/locks/dirs'
 logging_level: 'VERYCUSTOM'
 logging_path: '/var/logs/superlogs'
 request_frequency: 16
+reporter_interval: 11
 agent_name: 'ulta-agent'
 folder_id: 'yc_folder_155'
 no_cache: true

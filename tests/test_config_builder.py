@@ -21,19 +21,19 @@ def test_config_proxy():
 
     proxy.agent_name = 'some_name'
     proxy.folder_id = 'some_folder'
-    proxy.request_frequency = 10
+    proxy.request_interval = 10
     proxy.no_cache = False
 
     assert target.get('agent_name') == 'some_name'
     assert target.get('folder_id') == 'some_folder'
-    assert target.get('request_frequency') == 10
+    assert target.get('request_interval') == 10
     assert target.get('no_cache') is False
     assert target.get('work_dir') is None
     assert target.get('service_account_key_path') is None
 
     assert history['agent_name'] == [(source, 'some_name')]
     assert history['folder_id'] == [(source, 'some_folder'), ('old source', 'old_folder')]
-    assert history['request_frequency'] == [(source, 10)]
+    assert history['request_interval'] == [(source, 10)]
     assert history['no_cache'] == [(source, False)]
     assert len(history) == 4
 
@@ -42,31 +42,31 @@ def test_config_proxy_modified_only():
     source = 'test source'
     target = dict(
         work_dir='/some/path',
-        request_frequency=5,
+        request_interval=5,
     )
     history = defaultdict(
         list,
         {
             'work_dir': [('old source', '/some/path')],
-            'request_frequency': [('old source', 5)],
+            'request_interval': [('old source', 5)],
         },
     )
     proxy = _ConfigBuilder._ConfigProxy(source, history, target, modified_only=True)
 
     proxy.work_dir = '/some/path'
     proxy.folder_id = 'some_folder'
-    proxy.request_frequency = 10
+    proxy.request_interval = 10
     proxy.no_cache = False
 
     assert target.get('work_dir') == '/some/path'
     assert target.get('folder_id') == 'some_folder'
-    assert target.get('request_frequency') == 10
+    assert target.get('request_interval') == 10
     assert target.get('no_cache') is False
     assert target.get('service_account_key_path') is None
 
     assert history['work_dir'] == [('old source', '/some/path')]
     assert history['folder_id'] == [(source, 'some_folder')]
-    assert history['request_frequency'] == [(source, 10), ('old source', 5)]
+    assert history['request_interval'] == [(source, 10), ('old source', 5)]
     assert history['no_cache'] == [(source, False)]
     assert len(history) == 4
 
@@ -89,6 +89,7 @@ EXPECTED_CONFIG = UltaConfig(
     agent_name='ulta-agent',
     agent_version='15.2.11',
     backend_service_url='loadtesting.somewhere.com:3320',
+    reporter_interval=11,
     command='GO',
     compute_instance_id='yc_compute_instance_xkdf',
     environment='CUSTOM_ENV',
@@ -105,7 +106,7 @@ EXPECTED_CONFIG = UltaConfig(
     oauth_token='the_token_oauth',
     object_storage_url='s3.amazon.maybe',
     plugins=['ulta.yc', 'my_custom_plugin.package'],
-    request_frequency=16,
+    request_interval=16,
     service_account_id='asdfg',
     service_account_key_id='hkjl',
     service_account_key_path='mnopq',
@@ -174,7 +175,8 @@ def test_load_args_config():
             'agent_version',
             'compute_instance_id',
             'instance_lt_created',
-            'request_frequency',
+            'request_interval',
+            'reporter_interval',
             'service_account_key_id',
             'service_account_private_key',
             'iam_token',
@@ -225,7 +227,8 @@ def test_load_env_config():
             'agent_version',
             'compute_instance_id',
             'instance_lt_created',
-            'request_frequency',
+            'request_interval',
+            'reporter_interval',
         ],
     )
 

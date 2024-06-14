@@ -36,7 +36,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
         variables=_get_tank_variables(transport_factory),
     )
 
-    sleep_time = max(config.request_frequency, MIN_SLEEP_TIME)
+    sleep_time = max(config.request_interval, MIN_SLEEP_TIME)
     s3_client = transport_factory.create_s3_client()
 
     service = UltaService(
@@ -59,6 +59,9 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
         cancellation=cancellation,
     )
 
+    reporter_interval = (
+        max(config.reporter_interval, MIN_SLEEP_TIME) if config.reporter_interval is not None else sleep_time
+    )
     status_reporter = (
         DummyStatusReporter()
         if agent.is_anonymous_external_agent()
@@ -68,7 +71,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
             loadtesting_client,
             cancellation,
             service_state,
-            sleep_time,
+            reporter_interval,
         )
     )
 

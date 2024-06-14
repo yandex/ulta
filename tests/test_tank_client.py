@@ -113,7 +113,7 @@ def test_filesystem_cleanup():
             iam_service_url='',
             logging_service_url='',
             object_storage_url='',
-            request_frequency=0,
+            request_interval=0,
             instance_lt_created=False,
         )
     )
