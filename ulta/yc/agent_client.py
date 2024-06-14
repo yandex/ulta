@@ -1,7 +1,7 @@
 import grpc
 from ulta.common.utils import catch_exceptions
 from ulta.common.interfaces import AgentClient
-from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
+from ulta.yc.ycloud import TokenProviderProtocol
 from yandex.cloud.loadtesting.agent.v1 import agent_registration_service_pb2, agent_registration_service_pb2_grpc
 
 
@@ -21,15 +21,18 @@ class YCAgentClient(AgentClient):
         self._register_stub = agent_registration_service_pb2_grpc.AgentRegistrationServiceStub(grpc_channel)
         self.labels = labels
 
-    def _request_metadata(self, agent_version: str):
-        return [self._token_provider.get_auth_metadata(), (METADATA_AGENT_VERSION_ATTR, agent_version)]
+    def _request_metadata(self):
+        return [self._token_provider.get_auth_metadata()]
 
     @catch_exceptions
     def register_agent(self) -> str:
         response = self._register_stub.Register(
-            agent_registration_service_pb2.RegisterRequest(compute_instance_id=self.compute_instance_id),
+            agent_registration_service_pb2.RegisterRequest(
+                compute_instance_id=self.compute_instance_id,
+                agent_version=self.agent_version,
+            ),
             timeout=self.timeout,
-            metadata=self._request_metadata(self.agent_version),
+            metadata=self._request_metadata(),
         )
         return response.agent_instance_id
 
@@ -41,7 +44,7 @@ class YCAgentClient(AgentClient):
                 name=name,
                 agent_version=self.agent_version,
             ),
-            metadata=self._request_metadata(self.agent_version),
+            metadata=self._request_metadata(),
             timeout=self.timeout,
         )
         metadata = agent_registration_service_pb2.ExternalAgentRegisterMetadata()

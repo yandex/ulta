@@ -14,7 +14,6 @@ from ulta.yc.agent_client import (
     agent_registration_service_pb2,
     YCAgentClient,
 )
-from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR
 from yandex.cloud.operation import operation_pb2
 
 
@@ -61,9 +60,8 @@ def test_agent_send_version_on_greet(patch_agent_registration_stub_register):
 
     assert agent_id == 'abc'
     patch_agent_registration_stub_register.assert_called_once()
-    _, kwargs = patch_agent_registration_stub_register.call_args
-    assert 'metadata' in kwargs
-    assert (METADATA_AGENT_VERSION_ATTR, version) in kwargs['metadata']
+    args, _ = patch_agent_registration_stub_register.call_args
+    assert args[0].agent_version == version
 
 
 @pytest.mark.usefixtures('patch_agent_registration_stub')
