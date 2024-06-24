@@ -66,9 +66,16 @@ class AgentClient(Protocol):
         ...
 
 
-class CloudLoggingClient(Protocol):
+class RemoteLoggingClient(Protocol):
     def send_log(
-        self, log_group_id, log_data, resource_type, resource_id, level=None, request_id=None, timeout=5.0
+        self,
+        log_group_id: str,
+        log_data,
+        resource_type: str,
+        resource_id: str,
+        level=None,
+        request_id=None,
+        timeout=5.0,
     ) -> None:
         ...
 
@@ -94,7 +101,7 @@ class ClientFactory(Protocol):
     def create_s3_client(self) -> S3Client:
         ...
 
-    def create_cloud_logging_client(self) -> CloudLoggingClient:
+    def create_logging_client(self) -> RemoteLoggingClient:
         ...
 
 

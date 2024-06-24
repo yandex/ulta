@@ -128,7 +128,10 @@ class TankClient:
         try:
             FilesystemCleanup(self.logger, self.fs, job, resource_manager).cleanup()
         except Exception as e:
-            self.logger.error(f'Error during filesystem cleanup: {e}')
+            self.logger.warning(
+                'Pre-run filesystem cleanup failed: %(error)s',
+                dict(test_id=job.id, error=str(e)),
+            )
 
     def prepare_job(self, job: Job, files: Iterable[str]) -> Job:
         if self._is_test_session_running():
@@ -245,17 +248,25 @@ class TankClient:
 
         test_dir = self.get_dir_for_test(job_id)
         if not test_dir.exists():
-            self.logger.warning('get job status: %s directory not found', test_dir)
+            self.logger.warning(
+                'Couldn\'t find test status artifact file: %(dir_name)s directory not found',
+                dict(dir_name=test_dir, test_id=job_id),
+            )
             return JobStatus.from_status(Status.TEST_FINISHED)
         finish_status_file = test_dir / TankWorker.FINISH_FILENAME
         if not finish_status_file.exists():
-            self.logger.warning('get_job_status: %s file not found', finish_status_file)
+            self.logger.warning(
+                'Couldn\'t find test status artifact file: %(file_name)s not found',
+                dict(file_name=finish_status_file, test_id=job_id),
+            )
             return JobStatus.from_status(Status.TEST_FINISHED)
         try:
             with finish_status_file.open() as f:
                 return self.parse_job_status(yaml.safe_load(f) or {})
-        except yaml.YAMLError:
-            self.logger.exception("couldn't parse job status file")
+        except yaml.YAMLError as e:
+            self.logger.exception(
+                "Couldn't parse test finish status file: %(error)s", dict(test_id=job_id, error=str(e))
+            )
             return JobStatus.from_status(
                 AdditionalJobStatus.FAILED,
                 "couldn't parse job status file",

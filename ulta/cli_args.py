@@ -37,6 +37,7 @@ class CliArgs:
     labels: dict[str, str] | None = None
 
     test_id: str | None = None
+    log_group_id: str | None = None
 
 
 def parse_cli_args() -> CliArgs:
@@ -75,6 +76,7 @@ def _create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--iam-url', dest='iam_service_url', help='IAM service URL')
     parser.add_argument('--logging-url', dest='logging_service_url', help='Logging service URL')
     parser.add_argument('--storage-url', dest='object_storage_url', help='Object storage URL')
+    parser.add_argument('--remote-log-storage', dest='log_group_id', help='ID of YC Cloud Logging log group')
 
     parser.add_argument(
         '--sa-id',

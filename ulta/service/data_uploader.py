@@ -86,29 +86,37 @@ class DataUploader(JobBackgroundWorker):
         return (self.api_timeout for _ in range(self.api_attempts - 1))
 
     def _uploader(self):
-        self.logger.info('%s thread started', self.name)
+        self.logger.info('%(worker_name)s thread started', dict(worker_name=self.name))
         try:
             while not self.interrupted.is_set():
                 try:
                     entry = self.data_queue.get(timeout=1)
                     if entry is None:
-                        self.logger.info('%s queue returned None. No more messages expected.', self.name)
+                        self.logger.info(
+                            '%(worker_name)s queue returned None. No more messages expected.',
+                            dict(worker_name=self.name),
+                        )
                         break
                     self._send_with_retry(entry)
                 except Empty:
                     continue
                 except DataUploader._Interrupt:
-                    self.logger.error('%s uploader failed to connect to backend. Terminating...', self.name)
+                    self.logger.error(
+                        '%(worker_name)s uploader failed to connect to backend. Terminating...',
+                        dict(worker_name=self.name),
+                    )
                     self.interrupted.set()
-                except Exception:
-                    self.logger.exception('Unhandled exception occured. Skipping data chunk...')
+                except Exception as e:
+                    self.logger.exception(
+                        'Unhandled exception occured. Skipping data chunk...', dict(error=str(e), worker_name=self.name)
+                    )
 
             if self.interrupted.is_set():
-                self.logger.warning('%s received interrupt signal', (self.name))
+                self.logger.warning('%(worker_name)s received interrupt signal', dict(worker_name=self.name))
 
             self._purge_data_queue()
         finally:
-            self.logger.info('Closing %s thread', (self.name))
+            self.logger.info('Closing %(worker_name)s thread', dict(worker_name=self.name))
             self.finished.set()
 
     def _purge_data_queue(self):
@@ -135,7 +143,10 @@ class DataUploader(JobBackgroundWorker):
                         timeout = next(api_timeouts)
                     except StopIteration:
                         raise DataUploader._Interrupt()
-                    self.logger.warning('GRPC error, will retry in %ss...', timeout)
+                    self.logger.info(
+                        'GRPC error, will retry in %(next_attempt)ss...',
+                        dict(next_attempt=timeout, worker_name=self.name),
+                    )
                     time.sleep(timeout)
                     continue
                 else:

@@ -69,7 +69,10 @@ class ImbalanceUploader(JobFinalizer):
             pass
 
         if autostop is not None:
-            self.logger.info('Set imbalance %s at %s. Comment: %s', autostop.rps, autostop.timestamp, autostop.message)
+            self.logger.info(
+                'Set imbalance %(rps)s at %(timestamp)s. Comment: %(comment)s',
+                dict(rps=autostop.rps, timestamp=autostop.timestamp, comment=autostop.message),
+            )
             self.loadtesting_client.set_imbalance_and_dsc(
                 self.job_id, autostop.rps, autostop.timestamp, autostop.message
             )

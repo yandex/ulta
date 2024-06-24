@@ -65,7 +65,7 @@ class YCFactory(ClientFactory):
             self.token_provider,
         )
 
-    def create_cloud_logging_client(self) -> YCCloudLoggingClient:
+    def create_logging_client(self) -> YCCloudLoggingClient:
         return YCCloudLoggingClient(self.channels.get_channel(self.config.logging_service_url), self.token_provider)
 
 

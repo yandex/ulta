@@ -16,6 +16,9 @@ class ArtifactUploader(Protocol):
     def publish_artifacts(self, job: Job) -> None:
         ...
 
+    def can_publish(self, job: Job) -> bool:
+        ...
+
 
 class S3ArtifactUploader(ArtifactUploader):
     def __init__(
@@ -30,13 +33,12 @@ class S3ArtifactUploader(ArtifactUploader):
         self.cancellation = cancellation
         self.logger = logger
 
-    def publish_artifacts(self, job: Job):
-        if not job.upload_artifact_settings:
-            self.logger.info('Artifact settings not provided. Nothing to upload.')
-            return
+    def can_publish(self, job: Job) -> bool:
+        return job is not None and bool(job.upload_artifact_settings) and bool(job.artifact_dir_path)
 
-        if not job or not job.artifact_dir_path:
-            self.logger.info('Job has no artifacts. Nothing to upload.')
+    def publish_artifacts(self, job: Job):
+        if not self.can_publish(job):
+            self.logger.info('Artifact settings not provided. Nothing to upload.')
             return
 
         try:
@@ -63,7 +65,10 @@ class S3ArtifactUploader(ArtifactUploader):
                 )
             except ObjectStorageError as e:
                 errors.append(e)
-                self.logger.exception('Failed to publish artifact %s to %s: %s', local_path, s3_filename, str(e))
+                self.logger.exception(
+                    'Failed to publish artifact %(file_name)s to %(s3_filename)s: %(error)s',
+                    dict(file_name=local_path, s3_filename=s3_filename, error=str(e)),
+                )
         if errors:
             msg = '\n'.join([str(e) for e in errors])
             raise ArtifactUploadError(f'Failed to upload one or more artifacts to s3: {msg}')
@@ -78,7 +83,7 @@ class ArtifactCollector:
             if os.access(path, os.R_OK):
                 yield path
             else:
-                self.logger.error('File %s is not readable', path)
+                self.logger.error('File %(file_name)s is not readable', dict(file_name=path))
 
     def _collect_files(
         self, path: Path, filter_include: list[str], filter_exclude: list[str]

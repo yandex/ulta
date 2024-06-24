@@ -6,9 +6,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable
 
-from ulta.common.ammo import Ammo
-from ulta.common.cancellation import Cancellation, CancellationRequest
-from ulta.common.interfaces import LoadtestingClient, S3Client, NamedService
 from google.api_core.exceptions import (
     ClientError,
     FailedPrecondition,
@@ -23,9 +20,12 @@ from ulta.common.exceptions import (
     JobNotExecutedError,
     JobStoppedError,
 )
+from ulta.common.ammo import Ammo
+from ulta.common.cancellation import Cancellation, CancellationRequest
 from ulta.common.file_system import ensure_dir
-from ulta.common.job import Job, JobResult, ArtifactSettings
+from ulta.common.interfaces import LoadtestingClient, S3Client, NamedService
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
+from ulta.common.job import Job, JobResult, ArtifactSettings
 from ulta.common.state import State, GenericObserver
 from ulta.service.artifact_uploader import ArtifactUploader
 from ulta.service.tank_client import TankClient, TankStatus, INTERNAL_ERROR_TYPE
@@ -72,17 +72,20 @@ class UltaService:
         for payload_entry in job_message.data_payload:
             ammo_name = payload_entry.name
             if not ammo_name:
-                self.logger.warning('Test data specified with no name.')
+                self.logger.warning('Test data specified with no name.', dict(test_id=job_message.id))
                 raise InvalidJobDataError('Test data specified with no name.')
 
             ammo_file_path = os.path.join(test_data_dir, ammo_name.strip('/'))
             ammo_file_path = os.path.normpath(ammo_file_path)
             if os.path.commonpath((test_data_dir, ammo_file_path)) != os.path.normpath(test_data_dir):
-                self.logger.error('Cannot write ammo file to %s', ammo_file_path)
+                self.logger.error('Can\'t write ammo file to %(dest_file_name)s', dict(dest_file_name=ammo_file_path))
                 raise InvalidJobDataError('Invalid test data name')
 
             if payload_entry.is_transient:
-                self.logger.info('Downloading transient ammo job_id=%s, name=%s', job_message.id, ammo_name)
+                self.logger.info(
+                    'Downloading transient ammo %(ammo_name)s',
+                    dict(test_id=job_message.id, ammo_name=ammo_name, dest_file_name=ammo_file_path),
+                )
                 self.loadtesting_client.download_transient_ammo(
                     job_id=job_message.id,
                     ammo_name=ammo_name,
@@ -90,9 +93,12 @@ class UltaService:
                 )
             else:
                 self.logger.info(
-                    'Downloading s3 file from %s/%s',
-                    payload_entry.storage_object.object_storage_bucket,
-                    payload_entry.storage_object.object_storage_filename,
+                    'Downloading s3 file from %(bucket)s/%(file_name)s',
+                    dict(
+                        bucket=payload_entry.storage_object.object_storage_bucket,
+                        file_name=payload_entry.storage_object.object_storage_filename,
+                        dest_file_name=ammo_file_path,
+                    ),
                 )
                 self.s3_client.download(
                     storage_object=payload_entry.storage_object,
@@ -109,7 +115,10 @@ class UltaService:
                 job.id, AdditionalJobStatus.JOB_STATUS_UNSPECIFIED, error, error_type
             )
         except Exception as e:
-            self.logger.exception('Failed to set %s error to job: %s', error_type, str(e))
+            self.logger.exception(
+                'Failed to update test %(test_id)s status to %(error_type)s: %(error)s',
+                dict(test_id=job.id, error_type=error_type, error=str(e)),
+            )
 
     def claim_job_status(self, job: Job, status: JobStatus):
         job.update_status(status)
@@ -129,7 +138,7 @@ class UltaService:
         try:
             job_message = self.loadtesting_client.get_job(job_id)
         except NotFound:
-            self.logger.info('No pending jobs for agent')
+            self.logger.debug('No pending jobs for agent')
             return None
 
         if job_message is None or not job_message.id:
@@ -145,17 +154,17 @@ class UltaService:
             job.ammos = self._extract_ammo(job_message, job.test_data_dir)
             return job
         except json.JSONDecodeError as error:
-            self.logger.exception('Invalid job config format')
+            self.logger.exception('Invalid job config format', dict(test_id=job_message.id, error=str(error)))
             self.claim_job_failed(job, f'Invalid job config:{str(error)}', 'JOB_CONFIG')
         except (
             ObjectStorageError,
             ClientError,
             InvalidJobDataError,
         ) as error:
-            self.logger.exception('Error loading test data')
+            self.logger.exception('Error loading test data', dict(test_id=job_message.id, error=str(error)))
             self.claim_job_failed(job, f'Error loading test data: {str(error)})', 'JOB_AMMO')
         except Exception as error:
-            self.logger.exception('Unknown exception')
+            self.logger.exception('Unknown exception', dict(test_id=job_message.id, error=str(error)))
             self.claim_job_failed(job, f'Unknown error occured: {str(error)})', 'UNKNOWN')
             raise
         return None
@@ -234,12 +243,15 @@ class UltaService:
         self.tank_client.run_job()
 
     def serve(self):
-        while not self.cancellation.is_set():
-            with self.sustain_service():
-                job = self.wait_for_a_job()
-                job = self.execute_job(job)
-                self.publish_artifacts(job)
-            time.sleep(self.sleep_time)
+        try:
+            while not self.cancellation.is_set():
+                with self.sustain_service():
+                    job = self.wait_for_a_job()
+                    job = self.execute_job(job)
+                    self.publish_artifacts(job)
+                time.sleep(self.sleep_time)
+        finally:
+            self.logger.warning('Ulta agent is stopped')
 
     def serve_single_job(self, job_id: str) -> JobResult:
         try:
@@ -251,46 +263,68 @@ class UltaService:
             job = self.execute_job(job)
             self.publish_artifacts(job)
             return job.result()
-        except Exception:
-            self.logger.exception('Job execution failed for job_id (%s)', job_id)
+        except Exception as e:
+            self.logger.exception('Job execution failed for test_id %s', dict(test_id=job_id, error=e))
             raise
 
     def execute_job(self, job: Job) -> Job:
         try:
             self.await_tank_is_ready()
+            self.logger.info('Starting test execution %(test_id)s', dict(test_id=job.id))
 
             job = self.tank_client.prepare_job(job, self._get_job_data_paths(job.test_data_dir))
-            self.logger.info('Prepared job id(%s), tank_job_id(%s)', job.id, job.tank_job_id)
+            self.logger.info(
+                'Prepared test_id (%(test_id)s), tank_job_id(%(tank_job_id)s)',
+                dict(test_id=job.id, tank_job_id=job.tank_job_id),
+            )
 
             self.logger.info('waiting for job id(%s) to finish', job.id)
             self.serve_lt_job(job)
             self.logger.info('The job id(%s), tank_job_id(%s) is finished', job.id, job.tank_job_id)
         except JobStoppedError:
+            self.logger.warning('Test has been stopped', dict(test_id=job.id))
             self.claim_job_status(job, JobStatus.from_status(AdditionalJobStatus.STOPPED))
         except CancellationRequest as e:
+            self.logger.warning('Test has been interrupted due to agent shutdown', dict(test_id=job.id, reason=str(e)))
             self.claim_job_failed(job, f'Job execution has been interrupted on agent. {str(e)}', 'INTERRUPTED')
         except (FailedPrecondition, NotFound) as e:
+            self.logger.error(
+                'Test has been interrupted due to backend connection reason', dict(test_id=job.id, reason=str(e))
+            )
             # this will most likely raise another failed_precondition/not_found error
             # but we should try to report error message anyway
             self.claim_job_failed(job, f'Backend rejected current job: {str(e)}', 'FAILED')
         except TankError as e:
+            self.logger.error(
+                'Test has been interrupted: YandexTank error %(error)s',
+                dict(test_id=job.id, error=str(e)),
+            )
             self.claim_job_failed(job, f'Could not run job: {str(e)}', INTERNAL_ERROR_TYPE)
         finally:
             self.tank_client.stop_job()
             self.tank_client.finish()
+            self.logger.info(
+                'Test execution finished %(test_id)s with status %(status)s',
+                dict(test_id=job.id, status=job.status.status, exit_code=job.status.exit_code, error=job.status.error),
+            )
         return job
 
     def publish_artifacts(self, job: Job):
         with self.override_status(TankStatus.UPLOADING_ARTIFACTS):
             for uploader in self.artifact_uploaders:
+                if not uploader.service.can_publish(job):
+                    continue
                 try:
                     uploader.service.publish_artifacts(job)
+                    self.logger.info(
+                        'Publish artifacts to %(publisher)s', dict(publisher=uploader.name, test_id=job.id)
+                    )
                 except CancellationRequest as error:
                     self.claim_post_job_error(
                         job, f'Artifact uploading has been interrupted: {str(error)}', 'ARTIFACT_UPLOADING_FAILED'
                     )
                 except Exception as error:
-                    self.logger.exception('Failed to publish artifacts to %s', uploader.name)
+                    self.logger.exception('Failed to publish artifacts to %(publisher)s', dict(publisher=uploader.name))
                     self.claim_post_job_error(job, str(error), 'ARTIFACT_UPLOADING_FAILED')
 
     @contextmanager
@@ -310,7 +344,7 @@ class UltaService:
         try:
             yield
         except CancellationRequest:
-            self.logger.info('Received interrupt signal.')
+            self.logger.info('Terminating service...')
         except Exception:
             self.logger.exception('Unandled exception occured. Abandoning pending job...')
             return True

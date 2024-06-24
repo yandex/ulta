@@ -1,6 +1,7 @@
 import os
 import pytest
 from collections import defaultdict
+from datetime import timedelta
 from pydantic import ValidationError
 from ulta.cli_args import CliArgs
 from ulta.common.config import UltaConfig
@@ -98,8 +99,11 @@ EXPECTED_CONFIG = UltaConfig(
     iam_token='unique-auth-token',
     instance_lt_created=True,
     lock_dir='/var/locks/dirs',
-    logging_level='VERYCUSTOM',
-    logging_path='/var/logs/superlogs',
+    log_group_id='sheesh_very_unique_group',
+    log_level='VERYCUSTOM',
+    log_path='/var/logs/superlogs',
+    log_max_chunk_size=156,
+    log_retention_period=timedelta(minutes=23, seconds=11),
     logging_service_url='logging-ingester.ddd',
     netort_resource_manager='netortoverride',
     no_cache=True,
@@ -152,6 +156,7 @@ def test_load_args_config():
             lock_dir='/var/locks/dirs',
             log_level='VERYCUSTOM',
             log_path='/var/logs/superlogs',
+            log_group_id='sheesh_very_unique_group',
             no_cache=True,
             service_account_id='asdfg',
             service_account_key_path='mnopq',
@@ -181,6 +186,8 @@ def test_load_args_config():
             'service_account_private_key',
             'iam_token',
             'oauth_token',
+            'log_retention_period',
+            'log_max_chunk_size',
         ],
     )
 
@@ -200,6 +207,7 @@ def test_load_env_config():
             'LOADTESTING_AGENT_ID_FILE': 'path/to/agent_id_file',
             'WORK_DIR': '~/.ulta',
             'LOCK_DIR': '/var/locks/dirs',
+            'LOADTESTING_LOG_REMOTE_STORAGE': 'sheesh_very_unique_group',
             'LOADTESTING_LOG_PATH': '/var/logs/superlogs',
             'LOADTESTING_LOG_LEVEL': 'VERYCUSTOM',
             'LOADTESTING_AGENT_NAME': 'ulta-agent',
@@ -229,6 +237,8 @@ def test_load_env_config():
             'instance_lt_created',
             'request_interval',
             'reporter_interval',
+            'log_retention_period',
+            'log_max_chunk_size',
         ],
     )
 

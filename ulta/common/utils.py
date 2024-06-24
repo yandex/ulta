@@ -1,7 +1,8 @@
 import functools
 import grpc
+import re
 import typing
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from google.api_core.exceptions import from_grpc_error
 from tenacity import Retrying, wait_fixed, retry_if_exception, stop_after_attempt
@@ -52,7 +53,35 @@ def retry_lt_client_call(func: typing.Callable):
     return wrapper
 
 
-def get_and_convert(value, cast: typing.Callable[[typing.Any], typing.Any]):
+def get_and_convert(value, cast: typing.Callable[[typing.Any], typing.Any], none_value=None):
     if value is None:
-        return None
+        return none_value
     return cast(value)
+
+
+def str_to_timedelta(value: str | int) -> timedelta:
+    if isinstance(value, int):
+        return timedelta(seconds=value)
+    if not isinstance(value, str):
+        raise ValueError('str_to_timedelta value is expected to be str or int')
+    suffixes = ['d', 'h', 'm', 's', 'ms', '(us|µs)']
+    pattern = ''.join([f'(([0-9]+){suffix})?' for suffix in suffixes])
+    pattern = f'(^{pattern}$)|(^[0-9]+$)'
+    assert pattern == '(^(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?(([0-9]+)(us|µs))?$)|(^[0-9]+$)'
+
+    m = re.match(pattern, value.strip())
+    if not m:
+        raise ValueError(f'Invalid duration value: {value}; expected value in format 18h20m30s150ms')
+
+    # (^[0-9]+$)
+    if m.group(15):
+        return timedelta(seconds=int(m.group(15)))
+
+    return timedelta(
+        days=get_and_convert(m.group(3), int, 0),
+        hours=get_and_convert(m.group(5), int, 0),
+        minutes=get_and_convert(m.group(7), int, 0),
+        seconds=get_and_convert(m.group(9), int, 0),
+        milliseconds=get_and_convert(m.group(11), int, 0),
+        microseconds=get_and_convert(m.group(13), int, 0),
+    )

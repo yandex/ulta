@@ -5,8 +5,8 @@ import sys
 from ulta.common.cancellation import Cancellation, CancellationType
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import TransportFactory, ClientFactory
+from ulta.common.logging import init_logging
 from ulta.config import configure, Command
-from ulta.logging import create_default_logger
 from ulta.module import load_class
 from ulta.service.command import run_serve
 from ulta.service.tank_client import TankClient
@@ -19,23 +19,25 @@ import ulta.yc  # noqa: ulta.yc is the default plugin for Yandex.Cloud Loadtesti
 def main():
     config, explanation = configure()
 
-    logger = create_default_logger(config)
-    logger.info('ulta config %s', explanation)
+    logger = init_logging(config)
+    logger.info('Ulta service config %s', explanation)
 
     cancellation = setup_cancellation(logger)
+    exit_code = 0
 
     try:
         setup_plugins(config, logger)
 
         if config.command == Command.SERVE or (config.command == Command.RUN and config.test_id):
-            sys.exit(run_serve(config, cancellation, logger))
+            exit_code = run_serve(config, cancellation, logger)
         elif config.command == Command.VERSION:
             print(VERSION)
         else:
-            sys.exit('Invalid arguments specified. See `ulta --help` for usage')
+            exit_code = 'Invalid arguments specified. See `ulta --help` for usage'
     except Exception:
         logger.exception('Ulta execution failure')
-        sys.exit(1)
+        exit_code = 1
+    sys.exit(exit_code)
 
 
 def setup_cancellation(logger: logging.Logger) -> Cancellation:

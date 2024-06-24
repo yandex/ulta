@@ -19,20 +19,15 @@ def patch_job_stub():
             yield Stb
 
 
-@pytest.fixture()
-def agent_info() -> AgentInfo:
-    return AgentInfo(
+def test_agent_send_version_on_get_job(patch_job_stub):
+    version = str(uuid.uuid4())
+    agent_info = AgentInfo(
         id='some_id',
         folder_id='some_folder_id',
         name='some_name',
         origin=AgentOrigin.UNKNOWN,
-        version='some_version',
+        version=version,
     )
-
-
-def test_agent_send_version_on_get_job(patch_job_stub, agent_info):
-    version = str(uuid.uuid4())
-    agent_info.version = version
 
     client = YCLoadtestingClient(MagicMock(), MagicMock(), agent_info)
     client.get_job()

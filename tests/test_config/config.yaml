@@ -6,8 +6,11 @@ object_storage_url: 's3.amazon.maybe'
 agent_id_file: 'path/to/agent_id_file'
 client_workdir: '~/.ulta'
 lock_dir: '/var/locks/dirs'
-logging_level: 'VERYCUSTOM'
-logging_path: '/var/logs/superlogs'
+log_group_id: 'sheesh_very_unique_group'
+log_retention_period: 23m11s
+log_max_chunk_size: 156
+log_level: 'VERYCUSTOM'
+log_path: '/var/logs/superlogs'
 request_frequency: 16
 reporter_interval: 11
 agent_name: 'ulta-agent'

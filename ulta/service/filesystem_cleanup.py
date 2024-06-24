@@ -24,7 +24,7 @@ class FilesystemCleanup:
         stpd_cache_ttl=DEFAULT_STPD_CACHE_TTL,
         netort_cache_ttl=DEFAULT_NETORT_CACHE_TTL,
     ):
-        self._logger = logger
+        self._logger = logger.getChild('FilesystemCleanup')
         self._fs = fs
         self._job = job
         self._resource_manager = resource_manager
@@ -55,7 +55,10 @@ class FilesystemCleanup:
         return stat.f_bavail * stat.f_frsize
 
     def _log_free_space(self, stage: str, path: Path):
-        self._logger.debug(f'FilesystemCleanup: free space {stage} cleanup {path}: {self._get_free_space(path)}')
+        self._logger.debug(
+            'free space %(stage)s cleanup %(path)s: %(free_space)s',
+            dict(stage=stage, path=path, free_space=self._get_free_space(path)),
+        )
 
     def _cleanup_temporary_dir(self):
         self._log_free_space('before', self._fs.tmp_dir)
@@ -69,7 +72,7 @@ class FilesystemCleanup:
 
     def _remove_old_tests_dirs(self):
         if not self._fs.tests_dir.exists():
-            self._logger.debug('FilesystemCleanup: there are no tests folder')
+            self._logger.debug('tests folder is not found')
             return
 
         self._log_free_space('before', self._fs.tests_dir)
@@ -89,7 +92,7 @@ class FilesystemCleanup:
 
     def _remove_old_stpd_cache_files(self):
         if not self._stpd_cache_dir.exists():
-            self._logger.debug('FilesystemCleanup: there are no stpd cache folder')
+            self._logger.debug('stpd cache folder is not found')
             return
 
         self._log_free_space('before', self._stpd_cache_dir)
@@ -107,7 +110,7 @@ class FilesystemCleanup:
 
     def _clean_netort_resources(self):
         if self._resource_manager is None:
-            self._logger.debug('FilesystemCleanup: there are no resource manager')
+            self._logger.debug('resource manager is not set')
             return
 
         netort_dir = Path(self._resource_manager.tmp_path_prefix)

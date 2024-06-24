@@ -38,15 +38,15 @@ def register_loadtesting_agent(
 def _identify_agent_id(agent: AgentInfo, agent_client: AgentClient, logger: logging.Logger) -> str | None:
     if agent.origin is AgentOrigin.COMPUTE_LT_CREATED:
         agent_instance_id = agent_client.register_agent()
-        logger.info('The agent has been registered with id(%s)', agent_instance_id)
+        logger.info('The agent has been registered with id "%(agent_id)s"', dict(agent_id=agent_instance_id))
         return agent_instance_id
 
     if agent.is_persistent_external_agent():
         agent_instance_id = agent_client.register_external_agent(folder_id=agent.folder_id, name=agent.name)
-        logger.info('The agent has been registered with id(%s)', agent_instance_id)
+        logger.info('The agent has been registered with id "%(agent_id)s"', dict(agent_id=agent_instance_id))
         return agent_instance_id
     elif agent.is_anonymous_external_agent():
-        logger.info('The agent is anonymous agent')
+        logger.info('The agent is anonymous')
         return ANONYMOUS_AGENT_ID
     else:
         raise AgentOriginError(
@@ -79,10 +79,14 @@ def try_read_agent_id(agent_id_file: str | None, logger: logging.Logger) -> str 
         with open(agent_id_file, '+r') as f:
             agent_id = f.read(50)
     except FileNotFoundError as e:
-        logger.error('Failed to load agent_id from file %s: %s', agent_id_file, e)
+        logger.error(
+            'Failed to load agent_id from file %(file_name)s: %(error)s', dict(file_name=agent_id_file, error=str(e))
+        )
         return None
     else:
-        logger.info('Load agent_id from file (%s)', agent_id)
+        logger.info(
+            'Load agent_id from file %(file_name)s: "%(agent_id)s"', dict(file_name=agent_id_file, agent_id=agent_id)
+        )
     return agent_id
 
 

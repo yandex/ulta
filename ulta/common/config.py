@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Protocol
 from pydantic import BaseModel, Field, StrictInt
 from ulta.common.config_validator import LabelKey, LabelValue
@@ -24,8 +25,11 @@ class UltaConfig(BaseModel):
     lock_dir: str
     request_interval: StrictInt
     reporter_interval: StrictInt | None = None
-    logging_path: str | None = None
-    logging_level: str | None = None
+    log_group_id: str | None = None
+    log_max_chunk_size: int | None = None
+    log_retention_period: timedelta | None = None
+    log_path: str | None = None
+    log_level: str | None = None
 
     agent_name: str | None = None
     folder_id: str | None = None

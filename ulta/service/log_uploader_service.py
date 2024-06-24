@@ -7,8 +7,8 @@ from enum import IntEnum
 from pathlib import Path
 from ulta.common.cancellation import Cancellation, CancellationType, CancellationRequest
 from ulta.common.exceptions import ArtifactUploadError
+from ulta.common.interfaces import RemoteLoggingClient
 from ulta.common.job import Job
-from ulta.common.interfaces import CloudLoggingClient
 from ulta.service.artifact_uploader import ArtifactUploader
 
 # limits are taken from https://cloud.yandex.com/en-ru/docs/logging/concepts/limits
@@ -25,21 +25,27 @@ class LogType(IntEnum):
 
 
 class LogUploaderService(ArtifactUploader):
-    def __init__(self, cloud_logging_client: CloudLoggingClient, cancellation: Cancellation, logger: logging.Logger):
+    def __init__(self, logging_client: RemoteLoggingClient, cancellation: Cancellation, logger: logging.Logger):
         self.logger = logger
         self.cancellation = cancellation
-        self.cloud_logging_client = cloud_logging_client
+        self.logging_client = logging_client
+
+    def can_publish(self, job: Job) -> bool:
+        return job is not None and bool(job.log_group_id) and bool(job.artifact_dir_path)
 
     def publish_artifacts(self, job: Job):
-        if job.log_group_id and job.artifact_dir_path:
-            self.logger.info('Sending logs...')
+        if self.can_publish(job):
+            self.logger.info(
+                'Sending test logs to remote log storage...',
+                dict(test_id=job.id, log_group_id=job.log_group_id, artifacts_path=job.artifact_dir_path),
+            )
             self._send_log_file(job, job.artifact_dir_path, LogType.TANK)
             self._send_log_file(job, job.artifact_dir_path, LogType[job.generator.name])
 
     def _send_log_file(self, job: Job, artifact_dir_path: str, log_type: LogType):
         try:
             self.cancellation.raise_on_set(CancellationType.FORCED)
-            if log_file := get_log_file(artifact_dir_path, log_type):
+            if log_file := get_log_file(artifact_dir_path, log_type=log_type):
                 self._send_log(log_file, log_type, job.log_group_id, job.id)
         except CancellationRequest:
             raise
@@ -50,13 +56,13 @@ class LogUploaderService(ArtifactUploader):
 
     def _send_log(self, log_file: str, log_type: LogType, log_group_id: str, job_id: str):
         if not Path(log_file).is_file():
-            self.logger.error('No file for sending log for %s', log_type.name)
+            self.logger.error('File not found: %(file_name)s', dict(file_name=log_type.name))
             return
 
         reader = LogReader(log_file, self.logger)
         for chunk in reader.read():
             self.cancellation.raise_on_set(CancellationType.FORCED)
-            _ = self.cloud_logging_client.send_log(
+            _ = self.logging_client.send_log(
                 log_group_id, chunk, f'loadtesting.log.{log_type.name.lower()}', resource_id=job_id
             )
         self.logger.debug('Logs were sent.')
@@ -91,7 +97,7 @@ class LogReader:
                 for chunk in self.read_log_data(f):
                     yield chunk
         except Exception:
-            self.logger.exception('failed to read log file %s', self.log_file)
+            self.logger.exception('failed to read log file %(file_name)s', dict(file_name=self.log_file))
             raise
 
     def _init_chunk(self, message_max_length):
@@ -118,9 +124,7 @@ class LogReader:
 
         while line := reader.readline():
             if len(line) > message_max_length:
-                self.logger.warning(
-                    'log message is exceeding service limit of 64KB per message, sending cut message...'
-                )
+                self.logger.debug('log message is exceeding service limit of 64KB per message, sending cut message...')
                 sink([line[i : i + message_max_length] for i in range(0, len(line), message_max_length)])
             else:
                 sink([line])

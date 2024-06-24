@@ -34,7 +34,6 @@ def get_metadata():
         session = requests.Session()
         session.mount(url, HTTPAdapter(max_retries=2))
         response = session.get(url, headers={"Metadata-Flavor": "Google"}).json()
-        LOGGER.debug(f"Instance metadata {response}")
         return response
     except requests.exceptions.ConnectionError:
         LOGGER.warning('Compute metadata service is unavailable')

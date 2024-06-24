@@ -7,7 +7,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from ulta.cli_args import CliArgs, Command, parse_str_as_key_values, parse_str_as_list_values, parse_cli_args
 from ulta.common.config import UltaConfig, DEFAULT_ENVIRONMENT, ExternalConfigLoader
-from ulta.common.utils import normalize_path, get_and_convert
+from ulta.common.utils import normalize_path, get_and_convert, str_to_timedelta
 from ulta.module import load_plugins
 from ulta.version import VERSION
 
@@ -84,7 +84,7 @@ class _ConfigBuilder:
             config.object_storage_url = 'https://storage.yandexcloud.net'
             config.request_interval = 1
             config.reporter_interval = 10
-            config.logging_level = 'INFO'
+            config.log_level = 'INFO'
             config.agent_version = VERSION
             config.no_cache = False
             config.instance_lt_created = False
@@ -106,9 +106,14 @@ class _ConfigBuilder:
             config.agent_id_file = content.get('agent_id_file')
             config.work_dir = content.get('client_workdir')
             config.lock_dir = content.get('lock_dir')
-            config.logging_path = content.get('logging_path')
-            config.logging_level = content.get('logging_level')
-            config.request_interval = get_and_convert(content.get('request_frequency'), int)
+            config.log_max_chunk_size = get_and_convert(content.get('log_max_chunk_size'), int)
+            config.log_retention_period = get_and_convert(content.get('log_retention_period'), str_to_timedelta)
+            config.log_group_id = content.get('log_group_id')
+            config.log_path = content.get('log_path', content.get('logging_path'))
+            config.log_level = content.get('log_level', content.get('logging_level'))
+            config.request_interval = get_and_convert(
+                content.get('request_interval', content.get('request_frequency')), int
+            )
             config.reporter_interval = get_and_convert(content.get('reporter_interval'), int)
             config.agent_name = content.get('agent_name')
             config.folder_id = content.get('folder_id')
@@ -131,8 +136,9 @@ class _ConfigBuilder:
             config.agent_id_file = os.getenv('LOADTESTING_AGENT_ID_FILE')
             config.work_dir = os.getenv('WORK_DIR')
             config.lock_dir = os.getenv('LOCK_DIR')
-            config.logging_path = os.getenv('LOADTESTING_LOG_PATH')
-            config.logging_level = os.getenv('LOADTESTING_LOG_LEVEL')
+            config.log_group_id = os.getenv('LOADTESTING_LOG_REMOTE_STORAGE')
+            config.log_path = os.getenv('LOADTESTING_LOG_PATH')
+            config.log_level = os.getenv('LOADTESTING_LOG_LEVEL')
             config.agent_name = os.getenv('LOADTESTING_AGENT_NAME')
             config.folder_id = os.getenv('LOADTESTING_FOLDER_ID')
             config.service_account_key_path = os.getenv('LOADTESTING_SA_KEY_FILE')
@@ -170,14 +176,15 @@ class _ConfigBuilder:
             config.transport = args.transport
             config.service_account_id = args.service_account_id
             config.service_account_key_path = args.service_account_key_path
-            config.logging_path = args.log_path
-            config.logging_level = args.log_level
+            config.log_path = args.log_path
+            config.log_level = args.log_level
             config.test_id = args.test_id
             config.work_dir = args.work_dir
             config.lock_dir = args.lock_dir
             config.labels = args.labels
             config.netort_resource_manager = args.netort_resource_manager
             config.plugins = args.plugins
+            config.log_group_id = args.log_group_id
 
             if args.no_cache:
                 config.no_cache = args.no_cache
@@ -188,7 +195,7 @@ class _ConfigBuilder:
             config.work_dir = normalize_path(config.work_dir)
             config.lock_dir = normalize_path(config.lock_dir)
             config.service_account_key_path = normalize_path(config.service_account_key_path)
-            config.logging_path = normalize_path(config.logging_path)
+            config.log_path = normalize_path(config.log_path)
 
     def build(self) -> UltaConfig:
         return UltaConfig(**self.config)

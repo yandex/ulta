@@ -1,11 +1,11 @@
-import threading
 import typing
 from contextlib import contextmanager
+from threading import Event, Thread
 
 
 @contextmanager
 def run_background_worker(
-    iteration: typing.Callable[[], None], error_handler: typing.Callable[[Exception], None], interval: int
+    iteration: typing.Callable[[], None], error_handler: typing.Callable[[Exception], None], interval: float
 ):
     try:
         thread, stop = _run_thread(iteration, error_handler, interval)
@@ -17,8 +17,10 @@ def run_background_worker(
             thread.join()
 
 
-def _run_thread(iteration: typing.Callable[[], None], error_handler: typing.Callable[[Exception], None], interval: int):
-    stop = threading.Event()
+def _run_thread(
+    iteration: typing.Callable[[], None], error_handler: typing.Callable[[Exception], None], interval: float
+):
+    stop = Event()
 
     def worker():
         while not stop.is_set():
@@ -29,6 +31,6 @@ def _run_thread(iteration: typing.Callable[[], None], error_handler: typing.Call
             finally:
                 stop.wait(interval)
 
-    thread = threading.Thread(target=worker)
+    thread = Thread(target=worker)
     thread.start()
     return thread, stop
