@@ -95,6 +95,8 @@ class _ConfigBuilder:
             return
 
         content = yaml.safe_load(Path(config_path).read_text('utf-8'))
+        assert isinstance(content, dict), f'Parsed yaml config file at {config_path} is not valid yaml dictionary'
+
         with self.next_source(config_path) as config:
             config.environment = content.get('environment')
             config.transport = content.get('transport_factory')
@@ -124,6 +126,8 @@ class _ConfigBuilder:
             config.labels = content.get('labels')
             config.plugins = content.get('plugins')
             config.no_cache = content.get('no_cache')
+            config.aws_access_key_id = content.get('aws_access_key_id')
+            config.aws_secret_access_key = content.get('aws_secret_access_key')
 
     def load_env_config(self):
         with self.next_source('env') as config:
@@ -156,6 +160,8 @@ class _ConfigBuilder:
             config.plugins = parse_str_as_list_values(os.getenv('LOADTESTING_PLUGINS'))
             if os.getenv('LOADTESTING_NO_CACHE'):
                 config.no_cache = True
+            config.aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
+            config.aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
 
     def load_args_config(self, args: CliArgs):
         if not args:

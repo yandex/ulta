@@ -59,6 +59,9 @@ class TankVariables:
     # using token_getter to pass YC iam token into tank plugins
     # token has expiration date, so we need getter here to get valid token for each tank launch
     token_getter: Callable[[], str] | None = None
+    s3_endpoint_url: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
 
 
 class TankClient:
@@ -116,13 +119,16 @@ class TankClient:
             yaml.dump(job.config, f)
             return f.name
 
+    def _set_tank_variable(self, name: str, value):
+        if value is not None and name not in os.environ:
+            os.environ[name] = value() if isinstance(value, Callable) else value
+
     def _prepare_tank_variables(self):
-        if (
-            self._variables is not None
-            and self._variables.token_getter is not None
-            and 'LOADTESTING_YC_TOKEN' not in os.environ
-        ):
-            os.environ['LOADTESTING_YC_TOKEN'] = self._variables.token_getter()
+        if self._variables is not None:
+            self._set_tank_variable('LOADTESTING_YC_TOKEN', self._variables.token_getter)
+            self._set_tank_variable('NETORT_S3_ENDPOINT_URL', self._variables.s3_endpoint_url)
+            self._set_tank_variable('NETORT_AWS_ACCESS_KEY_ID', self._variables.aws_access_key_id)
+            self._set_tank_variable('NETORT_AWS_SECRET_ACCESS_KEY', self._variables.aws_secret_access_key)
 
     def _ensure_filesystem_free_space(self, job: Job, resource_manager: ResourceManager | None):
         try:

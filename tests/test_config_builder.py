@@ -119,6 +119,8 @@ EXPECTED_CONFIG = UltaConfig(
     transport='yc',
     work_dir='~/.ulta',
     labels={'l1': 'v1', 'purpose': 'test'},
+    aws_access_key_id='aws_access_key_id_12345',
+    aws_secret_access_key='aws_access_key_id_secretsecret',
 )
 
 
@@ -188,6 +190,8 @@ def test_load_args_config():
             'oauth_token',
             'log_retention_period',
             'log_max_chunk_size',
+            'aws_access_key_id',
+            'aws_secret_access_key',
         ],
     )
 
@@ -223,6 +227,8 @@ def test_load_env_config():
             'RESOURCE_MANAGER_OVERRIDE': 'netortoverride',
             'LOADTESTING_LABELS': 'l1=v1,purpose=test',
             'LOADTESTING_PLUGINS': 'ulta.yc,my_custom_plugin.package',
+            'AWS_ACCESS_KEY_ID': 'aws_access_key_id_12345',
+            'AWS_SECRET_ACCESS_KEY': 'aws_access_key_id_secretsecret',
         },
     ):
         builder.load_env_config()

@@ -46,6 +46,9 @@ class UltaConfig(BaseModel):
     compute_instance_id: str | None = None
     instance_lt_created: bool
 
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = Field(default=None, json_schema_extra=dict(sensitive=True))
+
 
 class ExternalConfigLoader(Protocol):
     def name(self) -> str:

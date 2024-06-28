@@ -4,12 +4,12 @@ from functools import lru_cache
 
 from ulta.common.agent import AgentInfo
 from ulta.common.config import UltaConfig
-from ulta.common.interfaces import ClientFactory
+from ulta.common.interfaces import ClientFactory, S3Client
 from ulta.yc.agent_client import YCAgentClient
 from ulta.yc.backend_client import YCLoadtestingClient, YCJobDataUploaderClient
 from ulta.yc.config import YANDEX_COMPUTE
 from ulta.yc.cloud_logging_client import YCCloudLoggingClient
-from ulta.yc.s3_client import YCS3Client
+from ulta.yc.s3_client import YCS3Client, Boto3S3Client
 from ulta.yc.ycloud import (
     AuthTokenProvider,
     build_sa_key,
@@ -59,7 +59,15 @@ class YCFactory(ClientFactory):
             self.channels.get_channel(self.config.backend_service_url), self.token_provider, agent
         )
 
-    def create_s3_client(self) -> YCS3Client:
+    def create_s3_client(self) -> S3Client:
+        if (
+            self.config.object_storage_url is not None
+            and self.config.aws_access_key_id is not None
+            and self.config.aws_secret_access_key is not None
+        ):
+            return Boto3S3Client(
+                self.config.object_storage_url, self.config.aws_access_key_id, self.config.aws_secret_access_key
+            )
         return YCS3Client(
             self.config.object_storage_url,
             self.token_provider,

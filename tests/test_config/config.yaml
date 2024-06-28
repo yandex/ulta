@@ -28,3 +28,5 @@ labels:
 plugins:
   - ulta.yc
   - my_custom_plugin.package
+aws_access_key_id: 'aws_access_key_id_12345'
+aws_secret_access_key: 'aws_access_key_id_secretsecret'

@@ -35,7 +35,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
             fs=fs,
             loadtesting_client=transport_factory.create_job_data_uploader_client(agent),
             data_uploader_api_address=config.backend_service_url,
-            variables=_get_tank_variables(transport_factory),
+            variables=_get_tank_variables(transport_factory, config),
         )
 
         sleep_time = max(config.request_interval, MIN_SLEEP_TIME)
@@ -89,11 +89,16 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
                     return 0 if service_state.ok else 1
 
 
-def _get_tank_variables(transport_factory: ClientFactory):
+def _get_tank_variables(transport_factory: ClientFactory, config: UltaConfig):
     cloud_token_getter: typing.Callable[[], str] | None = None
     if hasattr(transport_factory, 'get_iam_token'):
         token_getter_candidate = getattr(transport_factory, 'get_iam_token')
         if isinstance(token_getter_candidate, typing.Callable):
             cloud_token_getter = token_getter_candidate
 
-    return TankVariables(token_getter=cloud_token_getter)
+    return TankVariables(
+        token_getter=cloud_token_getter,
+        aws_access_key_id=config.aws_access_key_id,
+        aws_secret_access_key=config.aws_secret_access_key,
+        s3_endpoint_url=config.object_storage_url,
+    )
