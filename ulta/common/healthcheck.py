@@ -5,8 +5,7 @@ from ulta.common.state import GenericObserver
 
 
 class HealthCheckProtocol(typing.Protocol):
-    def healthcheck(self):
-        ...
+    def healthcheck(self): ...
 
 
 class HealthCheck:

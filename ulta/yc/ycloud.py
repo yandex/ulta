@@ -79,11 +79,9 @@ class SAKey(object):
 
 
 class TokenProviderProtocol(Protocol):
-    def get_token(self) -> str:
-        ...
+    def get_token(self) -> str: ...
 
-    def get_auth_metadata(self) -> tuple[str, str]:
-        ...
+    def get_auth_metadata(self) -> tuple[str, str]: ...
 
 
 class AuthTokenProvider(TokenProviderProtocol):

@@ -13,11 +13,9 @@ ROOT_SEGMENT = '__root'
 
 
 class ArtifactUploader(Protocol):
-    def publish_artifacts(self, job: Job) -> None:
-        ...
+    def publish_artifacts(self, job: Job) -> None: ...
 
-    def can_publish(self, job: Job) -> bool:
-        ...
+    def can_publish(self, job: Job) -> bool: ...
 
 
 class S3ArtifactUploader(ArtifactUploader):

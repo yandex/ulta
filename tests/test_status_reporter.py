@@ -103,8 +103,7 @@ def test_generic_reporter_retention():
     logger = logging.getLogger()
     processed_messages = []
 
-    class Nop(Exception):
-        ...
+    class Nop(Exception): ...
 
     def handler(msg):
         processed_messages.append(msg)
@@ -168,8 +167,7 @@ def test_generic_reporter_run():
 
         return _handler
 
-    class Stop(Exception):
-        ...
+    class Stop(Exception): ...
 
     next1 = nexter(q1, data1)
     next2 = nexter(q2, data2)

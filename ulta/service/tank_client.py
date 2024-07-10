@@ -50,8 +50,7 @@ IDLE_STATUSES = [TankStatus.STATUS_UNSPECIFIED, TankStatus.READY_FOR_TEST, TankS
 
 
 class TankStatusProvider(Protocol):
-    def get_tank_status(self) -> TankStatus:
-        ...
+    def get_tank_status(self) -> TankStatus: ...
 
 
 @dataclass

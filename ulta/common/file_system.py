@@ -34,8 +34,7 @@ def ensure_dir(dir_path: Path | str, permissions: int = os.W_OK | os.R_OK | os.X
     return path
 
 
-class NotEnoughFreeSpace(Exception):
-    ...
+class NotEnoughFreeSpace(Exception): ...
 
 
 class FileSystemObserver(HealthCheckProtocol):
