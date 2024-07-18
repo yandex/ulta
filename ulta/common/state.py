@@ -61,7 +61,7 @@ class GenericObserver:
         self,
         *,
         stage: str,
-        critical: bool = True,
+        critical: bool,
         exceptions: type | tuple[type, ...] | None = None,
         suppress: bool = True,
     ):

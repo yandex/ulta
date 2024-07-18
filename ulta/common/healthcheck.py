@@ -19,7 +19,7 @@ class HealthCheck:
 
     def healthcheck(self):
         for hc in self._healthchecks:
-            with self._observer.observe(stage='healthcheck'):
+            with self._observer.observe(stage='healthcheck', critical=False):
                 hc.healthcheck()
 
     def run_healthcheck(self, healthcheck_interval=30):

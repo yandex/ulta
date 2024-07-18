@@ -66,12 +66,12 @@ def test_observer_default_catch_exception():
     cancellation = Cancellation()
     state = State()
     o = GenericObserver(state, logging.getLogger(), cancellation)
-    with o.observe(stage='somethin important here'):
+    with o.observe(stage='somethin important here', critical=True):
         raise Exception('first exception')
     assert state.ok is False
     assert cancellation.is_set() is True
 
-    with o.observe(stage='somethin important here'):
+    with o.observe(stage='somethin important here', critical=True):
         pass
     assert state.ok is True
     assert cancellation.is_set() is True
@@ -81,12 +81,12 @@ def test_observer_default_catch_custom_exception():
     cancellation = Cancellation()
     state = State()
     o = GenericObserver(state, logging.getLogger(), cancellation)
-    with o.observe(stage='somethin important here', exceptions=OSError):
+    with o.observe(stage='somethin important here', critical=True, exceptions=OSError):
         raise FileNotFoundError('first exception')
     assert state.ok is False
     assert cancellation.is_set() is True
     with pytest.raises(Exception, match='second exception'):
-        with o.observe(stage='somethin very important here', exceptions=OSError):
+        with o.observe(stage='somethin very important here', critical=False, exceptions=OSError):
             raise Exception('second exception')
 
 

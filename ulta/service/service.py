@@ -186,7 +186,7 @@ class UltaService:
     def wait_for_a_job(self) -> Job:
         while True:
             self.cancellation.raise_on_set()
-            with self._observer.observe(stage='request new test from backend', suppress=False):
+            with self._observer.observe(stage='request new test from backend', critical=False, suppress=False):
                 if job := self.get_job():
                     return job
             time.sleep(self.job_pooling_delay)
