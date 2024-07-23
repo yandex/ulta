@@ -11,7 +11,7 @@ from ulta.module import load_class
 from ulta.service.command import run_serve
 from ulta.service.tank_client import TankClient
 from ulta.version import VERSION
-from yandextank.contrib.netort.netort.resource import ResourceManager
+from yandextank.contrib.netort.netort.resource import ResourceManager, make_resource_manager
 
 import ulta.yc  # noqa: ulta.yc is the default plugin for Yandex.Cloud Loadtesting backend.
 
@@ -70,4 +70,6 @@ def setup_plugins(config: UltaConfig, logger: logging.Logger):
     if config.netort_resource_manager:
         logger.info('Using netort resource manager %s', config.netort_resource_manager)
         resource_manager = load_class(config.netort_resource_manager, base_class=ResourceManager)
-        TankClient.use_resource_manager(resource_manager)
+        TankClient.use_resource_manager(lambda *args: resource_manager())
+    else:
+        TankClient.use_resource_manager(lambda *args: make_resource_manager())
