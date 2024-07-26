@@ -15,6 +15,7 @@ from yandex.cloud.loadtesting.agent.v1 import (
 )
 
 from ulta.common.agent import AgentInfo
+from ulta.common.logging import LogMessage
 from ulta.common.utils import catch_exceptions, retry_lt_client_call
 from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
 from ulta.yc.trail_helper import prepare_trail_data, prepare_monitoring_data
@@ -44,6 +45,11 @@ class YCLoadtestingClient:
         )
         result = self.stub_agent.ClaimStatus(request, timeout=self.timeout, metadata=self._request_metadata())
         return result.code
+
+    @catch_exceptions
+    @retry_lt_client_call
+    def report_event_logs(self, idempotency_key: str, events: list[LogMessage]) -> None:
+        return None
 
     @catch_exceptions
     @retry_lt_client_call

@@ -1,6 +1,6 @@
 import pytest
 from datetime import timedelta
-from ulta.common.utils import str_to_timedelta
+from ulta.common.utils import str_to_timedelta, truncate_string
 
 
 @pytest.mark.parametrize(
@@ -36,3 +36,20 @@ def test_str_to_timedelta(value, expected):
 def test_str_to_timedelta_exception(value):
     with pytest.raises(ValueError):
         str_to_timedelta(value)
+
+
+@pytest.mark.parametrize(
+    'original, length, in_middle, expected',
+    [
+        ('some_string', 11, False, 'some_string'),
+        ('', 10, False, ''),
+        (None, 10, False, None),
+        ('some_string', 9, False, 'some_stri'),
+        ('very long long string', 15, False, 'very long lo...'),
+        ('very long long string', None, False, 'very long long string'),
+        ('some_string', 9, True, 'some_stri'),
+        ('very long long string', 15, True, 'very lo...tring'),
+    ],
+)
+def test_truncate_string(original, length, in_middle, expected):
+    assert truncate_string(original, length, in_middle) == expected

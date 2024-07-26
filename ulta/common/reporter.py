@@ -1,5 +1,6 @@
 import logging
 import typing
+import uuid
 from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -15,12 +16,13 @@ class Reporter:
         self,
         *sources: Queue,
         logger: logging.Logger,
-        handler: typing.Callable[[typing.Any], None],
+        handler: typing.Callable[[str, typing.Any], None],
         error_handler: typing.Callable[[Exception], None],
         retention_period: timedelta | None = None,
         max_batch_size: int = 1,
         report_interval: float = 5,
         max_unsent_size: int = 100_000,
+        prepare_message: typing.Callable[[typing.Any], typing.Any] | None = None,
     ):
         self._sources = sources
         self._handler = handler
@@ -33,6 +35,7 @@ class Reporter:
         self._unsent_messages: deque[_UnsentMessage] = deque(maxlen=max_unsent_size)
         self._lock = Lock()
         self._logger = logger
+        self._prepare_message = prepare_message
 
     @contextmanager
     def run(self):
@@ -51,7 +54,10 @@ class Reporter:
             for source in self._sources:
                 try:
                     while not source.empty():
-                        records.append(source.get_nowait())
+                        item = source.get_nowait()
+                        if self._prepare_message is not None:
+                            item = self._prepare_message(item)
+                        records.append(item)
                 except Empty:
                     pass
 
@@ -62,7 +68,7 @@ class Reporter:
             if not item:
                 continue
             try:
-                self._handler(item.data)
+                self._handler(item.id, item.data)
             except Exception as e:
                 self._put_unsent(item)
                 errors.append(e)
@@ -102,6 +108,7 @@ def _chop(data: list, size: int) -> list[list]:
 
 class _UnsentMessage:
     def __init__(self, data) -> None:
+        self.id = str(uuid.uuid4())
         self.ts = now().timestamp()
         self.data = data
 

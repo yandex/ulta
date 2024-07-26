@@ -67,15 +67,14 @@ def ulta_service():
 
     with patch('ulta.common.file_system.ensure_dir'):
         yield UltaService(
-            logging.getLogger(),
-            state,
-            loadtesting_client,
-            tank_client,
-            YCS3Client('storage_url', MagicMock()),
-            fs.tmp_dir,
-            0.1,
-            MagicMock(),
-            cancellation,
+            state=state,
+            loadtesting_client=loadtesting_client,
+            tank_client=tank_client,
+            s3_client=YCS3Client('storage_url', MagicMock()),
+            tmp_dir=fs.tmp_dir,
+            sleep_time=0.1,
+            artifact_uploaders=MagicMock(),
+            cancellation=cancellation,
         )
 
 

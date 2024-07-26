@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from dataclasses import dataclass
 from ulta.common.cancellation import Cancellation
+from ulta.common.logging import get_event_logger
 from ulta.common.utils import now
 import logging
 
@@ -17,8 +18,9 @@ class StateError:
 
 
 class State:
-    def __init__(self):
+    def __init__(self, events_logger: logging.Logger | None = None):
         self._active_errors: dict[str, StateError] = {}
+        self._events_logger = events_logger or get_event_logger()
 
     @property
     def ok(self) -> bool:
@@ -33,6 +35,7 @@ class State:
     def error(self, stage: str, error: str | Exception):
         new_error = StateError(updated_at=now(), stage=stage, message=str(error))
         self._active_errors[new_error._hash()] = new_error
+        self._events_logger.error(new_error.message, {'stage': new_error.stage})
 
     def cleanup(self, stage: str):
         self._active_errors = {e._hash(): e for e in self._active_errors.values() if e.stage != stage}

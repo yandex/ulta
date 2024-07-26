@@ -54,7 +54,7 @@ class Job:
     )
 
     def __repr__(self):
-        return f'Job({self.id=}, {self.tank_job_id=}, {self.log_group_id=})'
+        return f'Test(id={self.id}, internal_id={self.tank_job_id}, log_group_id={self.log_group_id})'
 
     @cached_property
     def generator(self) -> Generator:

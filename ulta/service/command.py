@@ -1,14 +1,17 @@
+import contextlib
 import logging
 import typing
 
+from ulta.common.agent import AgentInfo
 from ulta.common.cancellation import Cancellation
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
+from ulta.common.logging import get_logger, get_event_logger
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.loadtesting_agent_service import (
     register_loadtesting_agent,
 )
-from ulta.service.log_reporter import make_log_reporter
+from ulta.service.log_reporter import make_log_reporter, make_events_reporter
 from ulta.service.log_uploader_service import LogUploaderService
 from ulta.service.service import UltaService
 from ulta.common.file_system import make_fs_from_ulta_config, FileSystemObserver
@@ -27,7 +30,7 @@ def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Lo
     observer = GenericObserver(service_state, logger, cancellation)
 
     agent = register_loadtesting_agent(config, transport_factory.create_agent_client(), observer, logger)
-    with make_log_reporter(logger, config, agent, transport_factory).run():
+    with run_log_reporters(config, agent, transport_factory):
         loadtesting_client = transport_factory.create_loadtesting_client(agent)
 
         tank_client = TankClient(
@@ -102,3 +105,15 @@ def _get_tank_variables(transport_factory: ClientFactory, config: UltaConfig):
         aws_secret_access_key=config.aws_secret_access_key,
         s3_endpoint_url=config.object_storage_url,
     )
+
+
+@contextlib.contextmanager
+def run_log_reporters(config: UltaConfig, agent: AgentInfo, transport_factory: ClientFactory):
+    try:
+        with make_log_reporter(get_logger(), config, agent, transport_factory).run():
+            event_logger = get_event_logger()
+            with make_events_reporter(event_logger, config, agent, transport_factory).run():
+                event_logger.info('Agent started')
+                yield
+    finally:
+        pass

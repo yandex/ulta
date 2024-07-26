@@ -13,7 +13,6 @@ class LogMessage:
         self.record = record
         self.message = record.getMessage()
         self.level = record.levelno
-        self.timestamp = int(record.created)
         self.labels = labels
 
 
@@ -35,6 +34,10 @@ def get_logger(name: str = 'ulta') -> logging.Logger:
     return logging.getLogger(name)
 
 
+def get_event_logger() -> logging.Logger:
+    return get_logger('events')
+
+
 def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
     handlers = []
     if config.log_path:
@@ -49,7 +52,7 @@ def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
 
     stdout_log_level = logging.WARNING if handlers else None
     handlers.append(_create_stdout_handler(stdout_log_level))
-    handlers.append(_create_sink_handler(max_queue_size=100_000))
+    handlers.append(create_sink_handler(max_queue_size=100_000))
     return handlers
 
 
@@ -84,7 +87,7 @@ class SinkHandler(logging.Handler):
         pass
 
 
-def _create_sink_handler(level: int | None = None, max_queue_size: int = 0):
+def create_sink_handler(level: int | None = None, max_queue_size: int = 0):
     # TODO: use priority deque to drop debug messages first on overflow
     handler = SinkHandler(Queue(max_queue_size))
     if level is not None:

@@ -5,6 +5,7 @@ import typing
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from google.api_core.exceptions import from_grpc_error
+from google.protobuf.timestamp_pb2 import Timestamp
 from tenacity import Retrying, wait_fixed, retry_if_exception, stop_after_attempt
 
 
@@ -85,3 +86,26 @@ def str_to_timedelta(value: str | int) -> timedelta:
         milliseconds=get_and_convert(m.group(11), int, 0),
         microseconds=get_and_convert(m.group(13), int, 0),
     )
+
+
+def float_to_proto_timestamp(ts: float) -> Timestamp:
+    seconds = int(ts)
+    nanos = int((ts - seconds) * 1e9)
+    return Timestamp(seconds=seconds, nanos=nanos)
+
+
+def truncate_string(value: str, length: int | None, cut_in_middle=True) -> str:
+    if length is None or not isinstance(value, str) or len(value) <= length:
+        return value
+
+    ph = '...'
+    ph_len = len(ph)
+    if length // 5 < ph_len:
+        return value[:length]
+    if cut_in_middle:
+        # "long long long string" => "long l...tring"
+        left_edge = length // 2
+        right_edge = len(value) - left_edge + ph_len - (length % 2)
+        return ''.join([value[:left_edge], ph, value[right_edge:]])
+    else:
+        return value[: length - ph_len] + ph

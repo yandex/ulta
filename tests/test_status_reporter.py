@@ -32,7 +32,7 @@ def test_generic_reporter(data1, data2, max_batch_size, expected_result):
     logger = logging.getLogger()
     processed_messages = []
 
-    def handler(msg):
+    def handler(_, msg):
         processed_messages.append(msg)
 
     def error_handler(error):
@@ -60,7 +60,7 @@ def test_generic_reporter_retry_unsent_data():
     e2 = RuntimeError('hh')
     ticks = [None, None, e1, e1, None, e2]
 
-    def handler(msg):
+    def handler(_, msg):
         if len(ticks) > 0:
             tick = ticks.pop(0)
             if tick is not None:
@@ -105,7 +105,7 @@ def test_generic_reporter_retention():
 
     class Nop(Exception): ...
 
-    def handler(msg):
+    def handler(_, msg):
         processed_messages.append(msg)
         raise Nop()
 
@@ -181,7 +181,7 @@ def test_generic_reporter_run():
     assert not q1.empty()
     assert not q2.empty()
 
-    def handler(msg):
+    def handler(_, msg):
         processed_messages.append(msg)
         n1, n2 = next1(), next2()
         if not n1 and not n2:

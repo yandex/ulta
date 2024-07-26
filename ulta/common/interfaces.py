@@ -1,6 +1,7 @@
 from typing import TypeVar, Generic, Protocol, Callable, Any
 from ulta.common.agent import AgentInfo
 from ulta.common.config import UltaConfig
+from ulta.common.logging import LogMessage
 
 T = TypeVar('T')
 
@@ -16,6 +17,8 @@ class NamedService(Generic[T]):
 
 class TankStatusClient(Protocol):
     def claim_tank_status(self, tank_status: str, status_message: str | None) -> None: ...
+
+    def report_event_logs(self, idempotency_key: str, events: list[LogMessage]) -> None: ...
 
 
 class JobFetcherClient(Protocol):
@@ -83,6 +86,8 @@ class ClientFactory(Protocol):
     def create_s3_client(self) -> S3Client: ...
 
     def create_logging_client(self) -> RemoteLoggingClient: ...
+
+    def create_events_log_client(self, agent: AgentInfo) -> RemoteLoggingClient: ...
 
 
 class TransportFactory:
