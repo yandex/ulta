@@ -126,7 +126,7 @@ class UltaService:
     def claim_job_status(self, job: Job, status: JobStatus):
         job.update_status(status)
         if status.status in FINISHED_STATUSES_TO_EXIT_CODE_MAPPING:
-            self._report_job_event(job, status)
+            self._report_job_finish_event(job, status)
         self.loadtesting_client.claim_job_status(job.id, status.status, status.error, status.error_type)
 
     def claim_job_failed(self, job: Job, error, error_type=None):
@@ -139,7 +139,7 @@ class UltaService:
             ),
         )
 
-    def _report_job_event(self, job: Job, status: JobStatus):
+    def _report_job_finish_event(self, job: Job, status: JobStatus):
         msg = ['Test %(test_id)s execution completed with status %(status)s']
         labels = dict(test_id=job.id, internal_id=job.tank_job_id, status=status.status)
         report_func = self.event_logger.info

@@ -25,7 +25,7 @@ def register_loadtesting_agent(
         with observer.observe(stage='load cached agent id from file', critical=False):
             agent.id = try_read_agent_id(config.agent_id_file, logger)
 
-    with observer.observe(stage='register agent in service', critical=True):
+    with observer.observe(stage='register agent in service', critical=True, suppress=False):
         agent.id = agent.id or _identify_agent_id(agent, agent_client, logger)
 
     if not config.no_cache and config.agent_id_file and agent.is_persistent_external_agent() and agent.id:

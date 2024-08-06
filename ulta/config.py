@@ -7,8 +7,8 @@ from pathlib import Path
 from contextlib import contextmanager
 from ulta.cli_args import CliArgs, Command, parse_str_as_key_values, parse_str_as_list_values, parse_cli_args
 from ulta.common.config import UltaConfig, DEFAULT_ENVIRONMENT, ExternalConfigLoader
+from ulta.common.module import load_plugins
 from ulta.common.utils import normalize_path, get_and_convert, str_to_timedelta
-from ulta.module import load_plugins
 from ulta.version import VERSION
 
 CONFIG_PATH_ENV = 'LOADTESTING_AGENT_CONFIG'

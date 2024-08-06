@@ -15,6 +15,7 @@ from yandex.cloud.loadtesting.agent.v1 import (
 )
 
 from ulta.common.agent import AgentInfo
+from ulta.common.interfaces import RemoteLoggingClient
 from ulta.common.logging import LogMessage
 from ulta.common.utils import catch_exceptions, retry_lt_client_call
 from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
@@ -159,3 +160,31 @@ class YCJobDataUploaderClient:
 
     def prepare_monitoring_data(self, data_item):
         return prepare_monitoring_data(monitoring_service_pb2, data_item)
+
+
+class YCEventLogClient(RemoteLoggingClient):
+    def __init__(self, channel, token_provider: TokenProviderProtocol, agent: AgentInfo):
+        self.timeout = 10.0
+        self._token_provider = token_provider
+        self.agent_id = agent.id
+        self.stub_agent = agent_service_pb2_grpc.AgentServiceStub(channel)
+
+    def _request_metadata(self):
+        return [self._token_provider.get_auth_metadata()]
+
+    def send_log(
+        self,
+        log_group_id: str,
+        log_data: list[LogMessage],
+        resource_type: str,
+        resource_id: str,
+        level=None,
+        request_id=None,
+        timeout=5.0,
+    ) -> None:
+        return self.report_event_logs(idempotency_key=request_id, events=log_data)
+
+    @catch_exceptions
+    @retry_lt_client_call
+    def report_event_logs(self, idempotency_key: str, events: list[LogMessage]):
+        return None

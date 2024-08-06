@@ -6,7 +6,7 @@ from ulta.common.agent import AgentInfo
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import ClientFactory, S3Client
 from ulta.yc.agent_client import YCAgentClient
-from ulta.yc.backend_client import YCLoadtestingClient, YCJobDataUploaderClient
+from ulta.yc.backend_client import YCLoadtestingClient, YCJobDataUploaderClient, YCEventLogClient
 from ulta.yc.config import YANDEX_COMPUTE
 from ulta.yc.cloud_logging_client import YCCloudLoggingClient
 from ulta.yc.s3_client import YCS3Client, Boto3S3Client
@@ -75,6 +75,13 @@ class YCFactory(ClientFactory):
 
     def create_logging_client(self) -> YCCloudLoggingClient:
         return YCCloudLoggingClient(self.channels.get_channel(self.config.logging_service_url), self.token_provider)
+
+    def create_events_log_client(self, agent: AgentInfo) -> YCEventLogClient:
+        return YCEventLogClient(
+            self.channels.get_channel(self.config.backend_service_url),
+            self.token_provider,
+            agent,
+        )
 
 
 class ChannelFactory:

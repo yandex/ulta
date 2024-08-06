@@ -1,12 +1,14 @@
 import contextlib
 import logging
+import signal
 import typing
-
+from queue import Queue, Empty
 from ulta.common.agent import AgentInfo
-from ulta.common.cancellation import Cancellation
+from ulta.common.cancellation import Cancellation, CancellationType
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
-from ulta.common.logging import get_logger, get_event_logger
+from ulta.common.logging import get_root_logger, get_event_logger, create_sink_handler, SinkHandler
+from ulta.common.module import load_class
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.loadtesting_agent_service import (
     register_loadtesting_agent,
@@ -14,82 +16,112 @@ from ulta.service.loadtesting_agent_service import (
 from ulta.service.log_reporter import make_log_reporter, make_events_reporter
 from ulta.service.log_uploader_service import LogUploaderService
 from ulta.service.service import UltaService
-from ulta.common.file_system import make_fs_from_ulta_config, FileSystemObserver
+from ulta.common.file_system import make_fs_from_ulta_config, FileSystemObserver, FS
 from ulta.common.healthcheck import HealthCheck
 from ulta.common.state import State, GenericObserver
 from ulta.service.status_reporter import StatusReporter, DummyStatusReporter
 from ulta.service.tank_client import TankClient, TankVariables
+from yandextank.contrib.netort.netort.resource import ResourceManager, make_resource_manager
 
 MIN_SLEEP_TIME = 1
 
 
-def run_serve(config: UltaConfig, cancellation: Cancellation, logger: logging.Logger) -> int:
+def run_serve(config: UltaConfig, config_str: str, logger: logging.Logger) -> int:
+    log_interceptor = init_log_interceptor(100_000)
+
+    logger.info('Ulta service config %s', config_str)
+    setup_plugins(config, logger)
+
+    cancellation = setup_cancellation(logger)
     service_state = State()
     fs = make_fs_from_ulta_config(config)
     transport_factory = TransportFactory.get(config)
     observer = GenericObserver(service_state, logger, cancellation)
 
     agent = register_loadtesting_agent(config, transport_factory.create_agent_client(), observer, logger)
-    with run_log_reporters(config, agent, transport_factory):
-        loadtesting_client = transport_factory.create_loadtesting_client(agent)
-
-        tank_client = TankClient(
-            logger=logger,
-            fs=fs,
-            loadtesting_client=transport_factory.create_job_data_uploader_client(agent),
-            data_uploader_api_address=config.backend_service_url,
-            variables=_get_tank_variables(transport_factory, config),
-        )
-
-        sleep_time = max(config.request_interval, MIN_SLEEP_TIME)
-        s3_client = transport_factory.create_s3_client()
-
-        service = UltaService(
-            logger=logger,
-            state=service_state,
-            loadtesting_client=loadtesting_client,
-            tank_client=tank_client,
-            s3_client=s3_client,
-            tmp_dir=fs.tmp_dir,
-            sleep_time=sleep_time,
-            artifact_uploaders=[
-                NamedService(
-                    'Cloud Logging uploader',
-                    LogUploaderService(transport_factory.create_logging_client(), cancellation, logger),
-                ),
-                NamedService(
-                    'S3 Artifact Uploader',
-                    S3ArtifactUploader(loadtesting_client, s3_client, cancellation, logger),
-                ),
-            ],
+    with run_log_reporters(config, agent, transport_factory, log_interceptor.sink):
+        release_log_interceptor(log_interceptor)
+        return run_service(
+            config=config,
             cancellation=cancellation,
+            service_state=service_state,
+            transport_factory=transport_factory,
+            agent=agent,
+            fs=fs,
+            logger=logger,
         )
 
-        reporter_interval = (
-            max(config.reporter_interval, MIN_SLEEP_TIME) if config.reporter_interval is not None else sleep_time
-        )
-        status_reporter = (
-            DummyStatusReporter()
-            if agent.is_anonymous_external_agent()
-            else StatusReporter(
-                logger,
-                service,
-                loadtesting_client,
-                cancellation,
-                service_state,
-                reporter_interval,
-            )
-        )
 
-        file_system_hc = FileSystemObserver(fs, service_state, logger, cancellation)
-        with HealthCheck(observer, [file_system_hc]).run_healthcheck():
-            with status_reporter.run():
-                if config.test_id:
-                    result = service.serve_single_job(config.test_id)
-                    return result.exit_code
-                else:
-                    service.serve()
-                    return 0 if service_state.ok else 1
+def run_service(
+    *,
+    config: UltaConfig,
+    cancellation: Cancellation,
+    service_state: State,
+    transport_factory: ClientFactory,
+    agent: AgentInfo,
+    fs: FS,
+    logger: logging.Logger,
+) -> int:
+    loadtesting_client = transport_factory.create_loadtesting_client(agent)
+
+    tank_client = TankClient(
+        logger=logger,
+        fs=fs,
+        loadtesting_client=transport_factory.create_job_data_uploader_client(agent),
+        data_uploader_api_address=config.backend_service_url,
+        variables=_get_tank_variables(transport_factory, config),
+    )
+
+    sleep_time = max(config.request_interval, MIN_SLEEP_TIME)
+    s3_client = transport_factory.create_s3_client()
+
+    service = UltaService(
+        logger=logger,
+        state=service_state,
+        loadtesting_client=loadtesting_client,
+        tank_client=tank_client,
+        s3_client=s3_client,
+        tmp_dir=fs.tmp_dir,
+        sleep_time=sleep_time,
+        artifact_uploaders=[
+            NamedService(
+                'Cloud Logging uploader',
+                LogUploaderService(transport_factory.create_logging_client(), cancellation, logger),
+            ),
+            NamedService(
+                'S3 Artifact Uploader',
+                S3ArtifactUploader(loadtesting_client, s3_client, cancellation, logger),
+            ),
+        ],
+        cancellation=cancellation,
+    )
+
+    reporter_interval = (
+        max(config.reporter_interval, MIN_SLEEP_TIME) if config.reporter_interval is not None else sleep_time
+    )
+    status_reporter = (
+        DummyStatusReporter()
+        if agent.is_anonymous_external_agent()
+        else StatusReporter(
+            logger,
+            service,
+            loadtesting_client,
+            cancellation,
+            service_state,
+            reporter_interval,
+        )
+    )
+
+    file_system_hc = FileSystemObserver(fs, service_state, logger, cancellation)
+    observer = GenericObserver(service_state, logger, cancellation)
+    with HealthCheck(observer, [file_system_hc]).run_healthcheck():
+        with status_reporter.run():
+            if config.test_id:
+                result = service.serve_single_job(config.test_id)
+                return result.exit_code
+            else:
+                service.serve()
+                return 0 if service_state.ok else 1
 
 
 def _get_tank_variables(transport_factory: ClientFactory, config: UltaConfig):
@@ -107,13 +139,68 @@ def _get_tank_variables(transport_factory: ClientFactory, config: UltaConfig):
     )
 
 
-@contextlib.contextmanager
-def run_log_reporters(config: UltaConfig, agent: AgentInfo, transport_factory: ClientFactory):
+def init_log_interceptor(size: int) -> SinkHandler:
+    logger = get_root_logger()
+    handler = create_sink_handler(max_queue_size=size)
+    logger.addHandler(handler)
+    return handler
+
+
+def release_log_interceptor(handler: SinkHandler):
+    logger = get_root_logger()
+    logger.removeHandler(handler)
+    # purge queue
     try:
-        with make_log_reporter(get_logger(), config, agent, transport_factory).run():
+        while True:
+            handler.sink.get_nowait()
+    except Empty:
+        pass
+
+
+@contextlib.contextmanager
+def run_log_reporters(
+    config: UltaConfig, agent: AgentInfo, transport_factory: ClientFactory, cached_logs: Queue | None
+):
+    try:
+        with make_log_reporter(get_root_logger(), config, agent, transport_factory, cached_logs).run():
             event_logger = get_event_logger()
             with make_events_reporter(event_logger, config, agent, transport_factory).run():
                 event_logger.info('Agent started')
                 yield
     finally:
         pass
+
+
+def setup_cancellation(logger: logging.Logger) -> Cancellation:
+    cancellation = Cancellation()
+
+    def terminate(signo, *args):
+        if cancellation.is_set(CancellationType.FORCED):
+            logger.warning('Received signal: %s. Terminating service', signal.Signals(signo).name)
+        elif cancellation.is_set(CancellationType.GRACEFUL):
+            cancellation.notify(f'Received signal: {signal.Signals(signo).name}', CancellationType.FORCED)
+            logger.warning('Received duplicate signal: %s. Terminating...', signal.Signals(signo).name)
+        else:
+            cancellation.notify(f'Received signal: {signal.Signals(signo).name}', CancellationType.GRACEFUL)
+            logger.warning(
+                'Received signal: %s. Awaiting current job to finish and terminating...', signal.Signals(signo).name
+            )
+
+    signal.signal(signal.SIGINT, terminate)
+    signal.signal(signal.SIGTERM, terminate)
+
+    return cancellation
+
+
+def setup_plugins(config: UltaConfig, logger: logging.Logger):
+    # setup transport factory
+    if config.transport:
+        logger.info('Using transport factory %s', config.transport)
+        TransportFactory.use(load_class(config.transport, base_class=ClientFactory))
+
+    if config.netort_resource_manager:
+        logger.info('Using netort resource manager %s', config.netort_resource_manager)
+        resource_manager = load_class(config.netort_resource_manager, base_class=ResourceManager)
+        TankClient.use_resource_manager(lambda *args: resource_manager())
+    else:
+        TankClient.use_resource_manager(lambda *args: make_resource_manager())

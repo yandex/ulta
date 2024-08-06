@@ -17,7 +17,7 @@ class LogMessage:
 
 
 def init_logging(config: UltaConfig) -> logging.Logger:
-    logger = logging.getLogger()
+    logger = get_root_logger()
     logger.handlers = []
     logger.setLevel(config.log_level or logging.INFO)
     for handler in _create_default_handlers(config):
@@ -25,7 +25,11 @@ def init_logging(config: UltaConfig) -> logging.Logger:
             logging.Formatter('%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d\t%(message)s')
         )
         logger.addHandler(handler)
-    return logger
+    return get_logger()
+
+
+def get_root_logger() -> logging.Logger:
+    return logging.getLogger()
 
 
 def get_logger(name: str = 'ulta') -> logging.Logger:
@@ -35,7 +39,9 @@ def get_logger(name: str = 'ulta') -> logging.Logger:
 
 
 def get_event_logger() -> logging.Logger:
-    return get_logger('events')
+    logger = get_logger('events')
+    logger.propagate = True
+    return logger
 
 
 def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
@@ -52,7 +58,6 @@ def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
 
     stdout_log_level = logging.WARNING if handlers else None
     handlers.append(_create_stdout_handler(stdout_log_level))
-    handlers.append(create_sink_handler(max_queue_size=100_000))
     return handlers
 
 
@@ -75,11 +80,11 @@ def _create_stdout_handler(level: int | None = None):
 class SinkHandler(logging.Handler):
     def __init__(self, sink: Queue):
         logging.Handler.__init__(self)
-        self._sink = sink
+        self.sink = sink
 
     def emit(self, record: logging.LogRecord):
         try:
-            self._sink.put_nowait(record)
+            self.sink.put_nowait(record)
         except Full:
             pass
 
