@@ -79,8 +79,9 @@ def try_read_agent_id(agent_id_file: str | None, logger: logging.Logger) -> str 
         with open(agent_id_file, '+r') as f:
             agent_id = f.read(50)
     except FileNotFoundError as e:
-        logger.error(
-            'Failed to load agent_id from file %(file_name)s: %(error)s', dict(file_name=agent_id_file, error=str(e))
+        logger.debug(
+            'File with agent_id is missing or unreadable %(file_name)s: %(error)s',
+            dict(file_name=agent_id_file, error=str(e)),
         )
         return None
     else:
