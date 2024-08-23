@@ -24,7 +24,7 @@ analytic tools for the results they produce.
         'grpcio-tools',
         'PyJWT',
         'yandextank>=2.0.0',
-        'yandexcloud>=0.282.0',
+        'yandexcloud>=0.310.0',
         'protobuf',
         'google-api-core>=2.17.1',
         'pydantic>=2.5.3',

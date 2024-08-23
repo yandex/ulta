@@ -1,4 +1,5 @@
 import grpc
+import logging
 
 from google.protobuf.field_mask_pb2 import FieldMask
 from yandex.cloud.loadtesting.agent.v1 import (
@@ -17,7 +18,7 @@ from yandex.cloud.loadtesting.agent.v1 import (
 from ulta.common.agent import AgentInfo
 from ulta.common.interfaces import RemoteLoggingClient
 from ulta.common.logging import LogMessage
-from ulta.common.utils import catch_exceptions, retry_lt_client_call
+from ulta.common.utils import catch_exceptions, retry_lt_client_call, float_to_proto_timestamp
 from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
 from ulta.yc.trail_helper import prepare_trail_data, prepare_monitoring_data
 
@@ -187,4 +188,28 @@ class YCEventLogClient(RemoteLoggingClient):
     @catch_exceptions
     @retry_lt_client_call
     def report_event_logs(self, idempotency_key: str, events: list[LogMessage]):
-        return None
+        request = agent_service_pb2.ReportEventLogsRequest(
+            agent_instance_id=str(self.agent_id),
+            idempotency_key=idempotency_key,
+            events=[
+                agent_service_pb2.EventLog(
+                    message=e.message,
+                    severity=self._log_level_to_severity(e.level),
+                    timestamp=float_to_proto_timestamp(e.record.created),
+                    metadata={k: v or '' for k, v in e.labels.items() if k},
+                )
+                for e in events
+            ],
+        )
+        self.stub_agent.ReportEventLogs(request, timeout=self.timeout, metadata=self._request_metadata())
+
+    def _log_level_to_severity(self, level: int) -> int:
+        if level <= logging.DEBUG:
+            return agent_service_pb2.EventLog.Severity.DEBUG
+        if level <= logging.INFO:
+            return agent_service_pb2.EventLog.Severity.INFO
+        if level <= logging.WARN:
+            return agent_service_pb2.EventLog.Severity.WARNING
+        if level <= logging.ERROR:
+            return agent_service_pb2.EventLog.Severity.ERROR
+        return agent_service_pb2.EventLog.Severity.FATAL
