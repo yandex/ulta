@@ -47,6 +47,9 @@ class FilesystemCleanup:
             job_disk_limit = 2048
         if job_disk_limit <= 0:
             job_disk_limit = 2048
+        # extra 100M bytes for possible miscalculations of ResourceCheck plugin
+        # due to different approach to free space evaluation
+        job_disk_limit += 100
         job_disk_limit *= 1024 * 1024
         return job_disk_limit
 

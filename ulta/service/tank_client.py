@@ -149,7 +149,6 @@ class TankClient:
         self._prepare_tank_variables()
 
         resource_manager = self._resource_manager_factory() if self._resource_manager_factory else None
-        self._ensure_filesystem_free_space(job, resource_manager)
         try:
             self._tank_worker_start_shooting_event = multiprocessing.Event()
             self.tank_worker = TankWorker(
@@ -163,6 +162,7 @@ class TankClient:
             )
             self.tank_worker.collect_files()
             self.tank_worker.go_to_test_folder()
+            self._ensure_filesystem_free_space(job, resource_manager)
         except (ValidationError, LockError) as e:
             raise TankError(str(e)) from e
         job.tank_job_id = self.tank_worker.test_id
