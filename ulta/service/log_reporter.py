@@ -1,7 +1,6 @@
 import logging
 import typing
 from datetime import timedelta
-from itertools import islice
 from queue import Full, Empty, Queue
 from ulta.common.config import UltaConfig
 from ulta.common.agent import AgentInfo
@@ -19,8 +18,7 @@ class LogReporter:
         client: RemoteLoggingClient,
         additional_labels: dict[str, str | None] | None = None,
         max_message_length: int | None = None,
-        max_labels_size: int = 64,
-        max_labels_length: int | None = None,
+        max_labels_size: int = -1,
     ):
         self._agent_id = agent_id
         self._log_group_id = log_group_id
@@ -28,8 +26,7 @@ class LogReporter:
         additional_labels = additional_labels or {}
         self._labels = {k: str(v) for k, v in additional_labels.items() if v is not None}
         self._max_message_length = max_message_length
-        self._max_labels_size = max(0, max_labels_size - len(self._labels))
-        self._max_labels_length = max_labels_length
+        self._max_labels_size = max_labels_size
 
     def handle(self, request_id: str, records: list[LogMessage | logging.LogRecord]):
         messages: list[LogMessage] = []
@@ -49,13 +46,49 @@ class LogReporter:
             request_id=request_id,
         )
 
-    def _args_as_mapping(self, args: tuple[object, ...] | typing.Mapping[str, object] | None) -> dict[str, str | None]:
-        if isinstance(args, typing.MutableMapping):
-            return {
-                k: truncate_string(str(v), self._max_labels_length, False)
-                for k, v in islice(args.items(), self._max_labels_size)
-            }
-        return {}
+    @staticmethod
+    def _get_object_str(obj: object) -> str:
+        if obj is None:
+            return ''
+        elif isinstance(obj, str):
+            return obj
+        return str(obj)
+
+    @staticmethod
+    def _get_args_pair_size(arg_pair: tuple[str, object]) -> int:
+        if not isinstance(arg_pair[1], str):
+            arg_pair = (arg_pair[0], LogReporter._get_object_str(arg_pair[1]))
+        assert isinstance(arg_pair[1], str)
+        return len(arg_pair[0]) + len(arg_pair[1])
+
+    @staticmethod
+    def _make_labels(source: typing.Iterable[tuple[str, object]], max_size: int) -> tuple[dict[str, str], int]:
+        remaining_size = max_size
+        if max_size < 0:
+            remaining_size = 1_000_000
+
+        result = {}
+        for p in source:
+            p1 = LogReporter._get_object_str(p[1])
+            pair_size = LogReporter._get_args_pair_size((p[0], p1))
+            if pair_size > remaining_size:
+                if remaining_size < len(p[0]):
+                    break
+
+                result[p[0]] = truncate_string(p1, remaining_size - len(p[0]), cut_in_middle=False)
+                break
+            remaining_size -= pair_size
+            result[p[0]] = p1
+        return result, max_size if max_size < 0 else remaining_size
+
+    def _args_as_mapping(self, args: tuple[object, ...] | typing.Mapping[str, object] | None) -> dict[str, str]:
+        result, remaining_size = self._make_labels(self._labels.items(), self._max_labels_size)
+        if not isinstance(args, typing.Mapping):
+            return result
+
+        args_labels, _ = self._make_labels(sorted(args.items(), key=lambda p: len(repr(p[1]))), remaining_size)
+        result.update(args_labels)
+        return result
 
     def prepare_log_record(self, item: logging.LogRecord) -> LogMessage:
         labels = self._args_as_mapping(item.args)
@@ -131,8 +164,7 @@ def make_events_reporter(
         agent_id=agent.id,
         client=client,
         additional_labels={'agent_id': agent.id, 'agent_name': agent.name, 'agent_version': agent.version},
-        max_labels_length=100,
-        max_labels_size=64,
+        max_labels_size=8192,
         max_message_length=2000,
     )
     handler = create_sink_handler(max_queue_size=20_000)

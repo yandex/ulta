@@ -41,6 +41,7 @@ def test_str_to_timedelta_exception(value):
 @pytest.mark.parametrize(
     'original, length, in_middle, expected',
     [
+        ('some_string', 0, False, ''),
         ('some_string', 11, False, 'some_string'),
         ('', 10, False, ''),
         (None, 10, False, None),

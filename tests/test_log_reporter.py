@@ -1,5 +1,6 @@
 import logging
 import pytest
+from functools import reduce
 from queue import Queue
 from unittest import mock
 from ulta.common.agent import AgentInfo, AgentOrigin
@@ -7,7 +8,7 @@ from ulta.common.config import UltaConfig
 from ulta.common.interfaces import ClientFactory
 from ulta.common.logging import LogMessage
 from ulta.common.reporter import NullReporter
-from ulta.service.log_reporter import make_log_reporter, make_events_reporter
+from ulta.service.log_reporter import make_log_reporter, make_events_reporter, LogReporter
 
 
 @pytest.fixture
@@ -188,29 +189,117 @@ def test_loadtesting_log_reporter_smoke(default_config):
     assert log_data.message == 'ERROR_2 ss'
     assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 'agent_version': '1.2.3'}
 
-    # test limits
 
-    long_message = ''.join(['1234567890'] * 205)
-    attrs = {f'attr_{i}': f'v{i}' for i in range(70)}
+def test_loadtesting_log_reporter_with_limits(default_config):
+    logger = logging.getLogger('some_logger')
+    config = default_config(log_group_id='lggg_11')
+    agent = AgentInfo(
+        id='idid', name='my-name', version='1.2.3', origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id'
+    )
+    factory_mock = mock.Mock(spec=ClientFactory)
+    client = mock.Mock()
+    factory_mock.create_events_log_client.return_value = client
+    reporter = make_events_reporter(logger, config, agent, factory_mock)
+
+    assert not isinstance(reporter, NullReporter)
+
+    long_message = '1234567890' * 205
+    attrs = {f'attr_{i}': f'v{i}' for i in range(2000)}
     logger.info(long_message, attrs)
 
-    attr_with_long_value = {'vv': ''.join(['1234567890'] * 20)}
+    attr_with_long_value = {'vv': '1234567890' * 2000}
     logger.info(long_message, attr_with_long_value)
     reporter.report()
 
     calls = client.send_log.mock_calls
     logging.info('calls: %s', calls)
 
-    assert len(calls) == 2
-    call_kwargs = calls[1].kwargs
+    assert len(calls) == 1
+    call_kwargs = calls[0].kwargs
     assert len(call_kwargs['log_data']) == 2
 
     log_data = call_kwargs['log_data'][0]
     assert isinstance(log_data, LogMessage)
-    assert len(log_data.labels) == 64
+    assert _get_labels_len(log_data.labels) <= 8192
     assert len(log_data.message) == 2000
+    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 'agent_version': '1.2.3'} | {
+        f'attr_{i}': f'v{i}' for i in range(697)
+    }
 
     log_data = call_kwargs['log_data'][1]
     assert isinstance(log_data, LogMessage)
-    assert 'vv' in log_data.labels
-    assert len(log_data.labels.get('vv', '')) == 100
+    assert _get_labels_len(log_data.labels) == 8192
+    assert len(log_data.message) == 2000
+    assert log_data.labels == {
+        'agent_id': 'idid',
+        'agent_name': 'my-name',
+        'agent_version': '1.2.3',
+        'vv': '1234567890' * 814 + '...',
+    }
+
+
+@pytest.mark.parametrize(
+    'args, expected_size',
+    [
+        (('123', 555), 6),
+        (('some_key with space', 'wow, value'), 29),
+        (('some_key with space', None), 19),
+    ],
+)
+def test_loadtesting_log_reporter_args_pair_size(args, expected_size):
+    assert LogReporter._get_args_pair_size(args) == expected_size
+
+
+@pytest.mark.parametrize(
+    'msg, args, expected_message, expected_labels, expected_labels_len',
+    [
+        ('short_message', None, 'short_message', {}, 0),
+        ('1234567890' * 10, None, '1234567890123456789012345...9012345678901234567890', {}, 0),
+        (
+            '%s %s %s %s',
+            (
+                '11',
+                '22',
+                'asdfbf',
+                None,
+            ),
+            '11 22 asdfbf None',
+            {},
+            0,
+        ),
+        ('', ({'v1': 150, 'a1': 'asdfbbb'},), '', {'v1': '150', 'a1': 'asdfbbb'}, 14),
+        ('', ({'v1': '12345' * 10},), '', {'v1': '1234512345123451234512345...'}, 30),
+    ],
+)
+def test_loadtesting_log_reporter_prepare(msg, args, expected_message, expected_labels, expected_labels_len):
+    client = mock.Mock()
+    log_reporter = LogReporter(
+        '',
+        '',
+        client,
+        additional_labels={'agent_id': 'abcdf', 'some_other_value': '10500'},
+        max_message_length=50,
+        max_labels_size=64,
+    )
+    actual_msg = log_reporter.prepare_log_record(
+        logging.LogRecord(
+            name='logger_stdout',
+            level=logging.WARNING,
+            pathname='/some/path/name',
+            lineno=130,
+            msg=msg,
+            args=args,
+            exc_info=None,
+        )
+    )
+
+    expected_labels = {'agent_id': 'abcdf', 'some_other_value': '10500'} | expected_labels
+    assert actual_msg.message == expected_message
+    assert actual_msg.level == logging.WARNING
+    assert actual_msg.labels == expected_labels
+
+    assert _get_labels_len(actual_msg.labels) == 34 + expected_labels_len
+
+
+def _get_labels_len(labels: dict[str, str]):
+    return reduce(lambda acc, p: acc + len(p[0]) + len(p[1]), labels.items(), 0)
