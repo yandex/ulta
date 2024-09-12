@@ -24,9 +24,6 @@ def init_logging(config: UltaConfig) -> logging.Logger:
     logger.handlers = []
     logger.setLevel(config.log_level or logging.INFO)
     for handler in _create_default_handlers(config):
-        handler.setFormatter(
-            logging.Formatter('%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d\t%(message)s')
-        )
         logger.addHandler(handler)
     return get_logger()
 
@@ -59,8 +56,10 @@ def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
             except Exception:
                 pass
 
-    stdout_log_level = logging.WARNING if handlers else None
-    handlers.append(_create_stdout_handler(stdout_log_level))
+    stdout_handler_factory = config.custom_stdout_log_handler_factory or _create_stdout_handler
+    handler = stdout_handler_factory()
+    handler.setLevel(logging.INFO)
+    handlers.append(handler)
     return handlers
 
 
@@ -71,13 +70,20 @@ def _create_file_handler(log_file_path: str):
     open(log_file_path, 'a').close()
     current_file_mode = os.stat(log_file_path).st_mode
     os.chmod(log_file_path, current_file_mode | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-    return logging.FileHandler(log_file_path)
-
-
-def _create_stdout_handler(level: int | None = None):
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level if level is not None else logging.INFO)
+    handler = logging.FileHandler(log_file_path)
+    handler.setFormatter(_create_default_formatter())
     return handler
+
+
+def _create_stdout_handler():
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(_create_default_formatter())
+    return handler
+
+
+def _create_default_formatter():
+    return logging.Formatter('%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d\t%(message)s')
 
 
 class SinkHandler(logging.Handler):

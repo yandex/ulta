@@ -1,12 +1,16 @@
+import logging
+import typing
 from datetime import timedelta
 from typing import Protocol
-from pydantic import BaseModel, Field, StrictInt
+from pydantic import BaseModel, Field, StrictInt, ConfigDict
 from ulta.common.config_validator import LabelKey, LabelValue
 
 DEFAULT_ENVIRONMENT = 'DEFAULT'
 
 
 class UltaConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     command: str
     environment: str
     transport: str
@@ -30,6 +34,7 @@ class UltaConfig(BaseModel):
     log_retention_period: timedelta | None = None
     log_path: str | None = None
     log_level: str | None = None
+    custom_stdout_log_handler_factory: typing.Callable[[], logging.Handler] | None = Field(default=None, exclude=True)
 
     agent_name: str | None = None
     folder_id: str | None = None

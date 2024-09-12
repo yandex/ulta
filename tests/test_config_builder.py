@@ -141,6 +141,7 @@ def test_load_file_config():
             'test_id',
             'iam_token',
             'oauth_token',
+            'custom_stdout_log_handler_factory',
         ],
     )
 
@@ -192,6 +193,7 @@ def test_load_args_config():
             'log_max_chunk_size',
             'aws_access_key_id',
             'aws_secret_access_key',
+            'custom_stdout_log_handler_factory',
         ],
     )
 
@@ -245,6 +247,7 @@ def test_load_env_config():
             'reporter_interval',
             'log_retention_period',
             'log_max_chunk_size',
+            'custom_stdout_log_handler_factory',
         ],
     )
 
