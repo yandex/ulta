@@ -33,7 +33,7 @@ class ImbalanceDetectorPlugin(AbstractPlugin):
             return retcode
 
         for autostop in autostops:
-            if autostop and autostop.cause_criterion and autostop.imbalance_timestamp:
+            if autostop and autostop.cause_criterion:
                 self.data_queue.put(
                     ImbalanceEntry(
                         timestamp=autostop.imbalance_timestamp,

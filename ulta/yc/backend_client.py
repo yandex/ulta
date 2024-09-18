@@ -152,9 +152,15 @@ class YCJobDataUploaderClient:
             imbalance_point=rps,
             imbalance_ts=timestamp,
             imbalance_comment=comment,
-            update_mask=FieldMask(paths=['imbalance_point', 'imbalance_ts', 'imbalance_comment']),
+            update_mask=self._make_update_mask_for_set_imbalance(timestamp),
         )
         self.stub_test.Update(request, timeout=self.timeout, metadata=self._request_metadata())
+
+    def _make_update_mask_for_set_imbalance(self, timestamp: int) -> FieldMask:
+        paths = ['imbalance_point', 'imbalance_comment']
+        if timestamp:
+            paths.append('imbalance_ts')
+        return FieldMask(paths=paths)
 
     def prepare_test_data(self, data_item, stat_item):
         return prepare_trail_data(trail_service_pb2, data_item, stat_item)
