@@ -22,9 +22,15 @@ class LogMessage:
 def init_logging(config: UltaConfig) -> logging.Logger:
     logger = get_root_logger()
     logger.handlers = []
-    logger.setLevel(config.log_level or logging.INFO)
     for handler in _create_default_handlers(config):
         logger.addHandler(handler)
+
+    try:
+        logger.setLevel(config.log_level or logging.INFO)
+    except ValueError:
+        logger.setLevel(logging.INFO)
+        logger.error('Invalid log level value: %s', config.log_level)
+
     return get_logger()
 
 
@@ -58,7 +64,6 @@ def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
 
     stdout_handler_factory = config.custom_stdout_log_handler_factory or _create_stdout_handler
     handler = stdout_handler_factory()
-    handler.setLevel(logging.INFO)
     handlers.append(handler)
     return handlers
 
@@ -77,7 +82,6 @@ def _create_file_handler(log_file_path: str):
 
 def _create_stdout_handler():
     handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)
     handler.setFormatter(_create_default_formatter())
     return handler
 

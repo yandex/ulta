@@ -21,6 +21,7 @@ class YandexCloudConfigLoader(ExternalConfigLoader):
         METADATA_AGENT_NAME_ATTR = 'agent-name'
         METADATA_FOLDER_ID_ATTR = 'folder-id'
         METADATA_CLOUD_LOG_GROUP_ID = 'cloud-helper-logging-group-id'
+        METADATA_LOG_LEVEL = 'log-level'
         YANDEX_METADATA_FOLDER_ID_ATTR = 'folderId'
 
         metadata: dict = get_instance_metadata() or {}
@@ -32,6 +33,7 @@ class YandexCloudConfigLoader(ExternalConfigLoader):
             attrs.get(METADATA_LOGGING_HOST_ATTR), attrs.get(METADATA_LOGGING_PORT_ATTR)
         )
         config.log_group_id = attrs.get(METADATA_CLOUD_LOG_GROUP_ID)
+        config.log_level = attrs.get(METADATA_LOG_LEVEL)
         config.object_storage_url = attrs.get(METADATA_OBJECT_STORAGE_URL_ATTR)
         config.request_interval = get_and_convert(attrs.get(METADATA_REQUEST_INTERVAL), int)
         config.reporter_interval = get_and_convert(attrs.get(METADATA_REPORTER_INTERVAL), int)
