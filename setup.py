@@ -28,6 +28,7 @@ analytic tools for the results they produce.
         'protobuf',
         'google-api-core>=2.17.1',
         'pydantic>=2.5.3',
+        'pyOpenSSL>=23.2.0',  # fix incompatibility with cryptography installing with yandexcloud
         'grpcio-status',
         'strenum',
         'tabulate',
