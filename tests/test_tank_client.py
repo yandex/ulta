@@ -22,7 +22,7 @@ from yandextank.contrib.netort.netort.resource import ResourceManager, ResourceM
         ({'tank_msg': 'some tank_msg'}, 'some tank_msg', 'internal'),
         ({'tank_msg': 'some tank_msg', 'exit_code': 1}, 'some tank_msg', 'internal'),
         ({'error': 'some error', 'exit_code': 1}, 'some error', None),
-        ({'exit_code': 1}, 'Unknown generator error', None),
+        ({'exit_code': 1}, 'Unknown error', None),
         ({'exit_code': 0}, '', None),
     ],
 )

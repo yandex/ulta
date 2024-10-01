@@ -288,7 +288,7 @@ class TankClient:
             if error:
                 error_type = INTERNAL_ERROR_TYPE
             elif exit_code and exit_code not in AUTOSTOP_EXIT_CODES:
-                error = 'Unknown generator error'
+                error = 'Unknown error'
         return error, error_type
 
     @staticmethod
