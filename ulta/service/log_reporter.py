@@ -93,18 +93,12 @@ class LogReporter:
     def prepare_log_record(self, item: logging.LogRecord) -> LogMessage:
         labels = self._args_as_mapping(item.args)
         labels.update(self._labels)
-        r = logging.LogRecord(
-            name=item.name,
+        return LogMessage(
             level=item.levelno,
-            pathname=item.pathname,
-            lineno=item.lineno,
-            msg=truncate_string(item.getMessage(), self._max_message_length),
-            args=(labels,),
-            exc_info=item.exc_info,
-            func=item.funcName,
-            sinfo=item.stack_info,
+            created_at=item.created,
+            labels=labels,
+            message=truncate_string(item.getMessage(), self._max_message_length),
         )
-        return LogMessage(r, labels)
 
 
 def make_log_reporter(

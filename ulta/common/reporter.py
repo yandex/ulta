@@ -55,9 +55,14 @@ class Reporter:
                 try:
                     while not source.empty():
                         item = source.get_nowait()
-                        if self._prepare_message is not None:
-                            item = self._prepare_message(item)
-                        records.append(item)
+
+                        try:
+                            if self._prepare_message is not None:
+                                item = self._prepare_message(item)
+                        except Exception as e:
+                            self._logger.warning('Failed to prepare log message: %s', e)
+                        else:
+                            records.append(item)
                 except Empty:
                     pass
 

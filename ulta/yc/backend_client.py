@@ -201,7 +201,7 @@ class YCEventLogClient(RemoteLoggingClient):
                 agent_service_pb2.EventLog(
                     message=e.message,
                     severity=self._log_level_to_severity(e.level),
-                    timestamp=float_to_proto_timestamp(e.record.created),
+                    timestamp=float_to_proto_timestamp(e.created_at),
                     metadata={k: v or '' for k, v in e.labels.items() if k},
                 )
                 for e in events

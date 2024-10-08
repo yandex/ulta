@@ -268,7 +268,13 @@ def test_loadtesting_log_reporter_args_pair_size(args, expected_size):
             0,
         ),
         ('', ({'v1': 150, 'a1': 'asdfbbb'},), '', {'v1': '150', 'a1': 'asdfbbb'}, 14),
-        ('', ({'v1': '12345' * 10},), '', {'v1': '1234512345123451234512345...'}, 30),
+        (
+            '%(v1)s',
+            ({'v1': '12345' * 20},),
+            '1234512345123451234512345...4512345123451234512345',
+            {'v1': '1234512345123451234512345...'},
+            30,
+        ),
     ],
 )
 def test_loadtesting_log_reporter_prepare(msg, args, expected_message, expected_labels, expected_labels_len):

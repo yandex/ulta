@@ -9,14 +9,11 @@ from ulta.common.config import UltaConfig
 
 
 class LogMessage:
-    def __init__(self, record: logging.LogRecord, labels: dict[str, str]):
-        self.record = record
-        try:
-            self.message = record.getMessage()
-        except TypeError:
-            self.message = record.msg
-        self.level = record.levelno
+    def __init__(self, *, message: str, labels: dict[str, str], level: int, created_at: float):
+        self.message = message
+        self.level = level
         self.labels = labels
+        self.created_at = created_at
 
 
 def init_logging(config: UltaConfig) -> logging.Logger:

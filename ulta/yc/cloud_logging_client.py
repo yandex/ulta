@@ -10,7 +10,7 @@ from yandex.cloud.logging.v1 import (
     log_entry_pb2,
     log_resource_pb2,
 )
-from ulta.common.utils import now
+from ulta.common.utils import now, float_to_proto_timestamp
 from ulta.common.interfaces import RemoteLoggingClient
 from ulta.common.logging import LogMessage
 from ulta.yc.ycloud import TokenProviderProtocol
@@ -24,10 +24,7 @@ class YCCloudLoggingClient(RemoteLoggingClient):
     def _make_message(self, data: str | LogMessage, default_level: int, request_id: str | None):
         json_payload = Struct()
         if isinstance(data, LogMessage):
-            timestamp = Timestamp(
-                seconds=int(data.record.created),
-                nanos=int(data.record.msecs * 1e6),
-            )
+            timestamp = float_to_proto_timestamp(data.created_at)
             level = _map_log_level(data.level) if data.level else default_level
             message = data.message
             json_payload.update(data.labels)
