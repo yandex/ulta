@@ -235,9 +235,10 @@ class TankClient:
         return self.tank_worker and self.tank_worker.is_alive() and self.tank_worker.status == Status.TEST_PREPARING
 
     def _is_active_test(self, test_id: str):
-        return (
-            self.tank_worker and self.tank_worker.test_id == test_id and self.tank_worker.status != Status.TEST_FINISHED
-        )
+        if not (self.tank_worker and self.tank_worker.is_alive() and self.tank_worker.test_id == test_id):
+            return False
+        status = JobStatus.from_status(self.tank_worker.status)
+        return not status.finished()
 
     def get_tank_status(self) -> TankStatus:
         if self._is_test_session_preparing():
@@ -257,14 +258,22 @@ class TankClient:
                 'Couldn\'t find test status artifact file: %(dir_name)s directory not found',
                 dict(dir_name=test_dir, test_id=job_id),
             )
-            return JobStatus.from_status(Status.TEST_FINISHED)
+            return JobStatus.from_status(
+                status=AdditionalJobStatus.FAILED,
+                error='Test artifacts folder is missing. Please check agent logs to identify the problem.',
+                error_type='TEST_FOLDER_IS_MISSING',
+            )
         finish_status_file = test_dir / TankWorker.FINISH_FILENAME
         if not finish_status_file.exists():
             self.logger.warning(
                 'Couldn\'t find test status artifact file: %(file_name)s not found',
                 dict(file_name=finish_status_file, test_id=job_id),
             )
-            return JobStatus.from_status(Status.TEST_FINISHED)
+            return JobStatus.from_status(
+                AdditionalJobStatus.FAILED,
+                error='Test result status file not found. Assuming test has been failed',
+                error_type='TEST_STATUS_FILE_IS_MISSING',
+            )
         try:
             with finish_status_file.open() as f:
                 return self.parse_job_status(yaml.safe_load(f) or {})
@@ -274,7 +283,7 @@ class TankClient:
             )
             return JobStatus.from_status(
                 AdditionalJobStatus.FAILED,
-                "couldn't parse job status file",
+                "Couldn't parse job status file",
                 INTERNAL_ERROR_TYPE,
             )
 
