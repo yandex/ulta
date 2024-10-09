@@ -162,11 +162,11 @@ class TankClient:
             )
             self.tank_worker.collect_files()
             self.tank_worker.go_to_test_folder()
+            job.tank_job_id = self.tank_worker.test_id
+            job.artifact_dir_path = self.get_dir_for_test(job.tank_job_id).absolute().as_posix()
             self._ensure_filesystem_free_space(job, resource_manager)
         except (ValidationError, LockError) as e:
             raise TankError(str(e)) from e
-        job.tank_job_id = self.tank_worker.test_id
-        job.artifact_dir_path = self.get_dir_for_test(job.tank_job_id).absolute().as_posix()
 
         self._register_workers(job)
         self.tank_worker.start()
