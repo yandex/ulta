@@ -229,11 +229,16 @@ class UltaService:
             self.cancellation.raise_on_set()
             with self.sustain_job():
                 self.serve_lt_signal(job.id)
-                job_status = self.tank_client.get_job_status(job.tank_job_id)
-                if done := job_status.finished():
-                    self.tank_client.finish()
-                self.claim_job_status(job, job_status)
-            time.sleep(self.sleep_time)
+                prev_job_status = None
+                sleep_due = time.time() + self.sleep_time
+                while time.time() < sleep_due and not done:
+                    job_status = self.tank_client.get_job_status(job.tank_job_id)
+                    if done := job_status.finished():
+                        self.tank_client.finish()
+                    if prev_job_status != job_status:
+                        self.claim_job_status(job, job_status)
+                        prev_job_status = job_status
+                    time.sleep(1)
 
     def serve_lt_signal(self, job_id: str):
         signal = self.loadtesting_client.get_job_signal(job_id)
