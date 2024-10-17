@@ -101,11 +101,14 @@ def test_disable_uploaders(config, expected_patch, fs_mock: FS):
     assert expected_patch == patch
 
 
-def test_filesystem_cleanup():
+@pytest.mark.parametrize('work_dir', ('/tmp/ulta_work', 'ulta_work'))
+@pytest.mark.parametrize('lock_dir', ('/tmp/ulta_lock', 'ulta_lock'))
+@pytest.mark.parametrize('netort_dir', ('/tmp/netort_cache', 'netort_cache'))
+def test_filesystem_cleanup(work_dir, lock_dir, netort_dir):
     fs = make_fs_from_ulta_config(
         UltaConfig(
-            work_dir='/tmp/ulta_work',
-            lock_dir='/tmp/ulta_lock',
+            work_dir=work_dir,
+            lock_dir=lock_dir,
             command='',
             environment='',
             transport='',
@@ -117,7 +120,7 @@ def test_filesystem_cleanup():
             instance_lt_created=False,
         )
     )
-    netort_dir = Path('/tmp/netort_cache/')
+    netort_dir = Path(netort_dir)
 
     old_job = Job(
         id='old_id',
@@ -153,19 +156,22 @@ def test_filesystem_cleanup():
         fs.tests_dir / job.id / 'config.yaml': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         fs.tests_dir / 'stpd-cache': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         fs.tests_dir / 'stpd-cache' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
+        fs.tests_dir / 'lunapark': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
+        fs.tests_dir / 'lunapark' / '123456': os.stat_result((stat.S_IFLNK, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         netort_dir: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         netort_dir / 'http': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         netort_dir / 'http' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
         netort_dir / 's3': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         netort_dir / 's3' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
     }
+    FILES.update({k.resolve(): v for k, v in FILES.items()})
     EXPECTED_RMTREE = {fs.tests_dir / 'old_id', fs.tmp_dir / 'old_id'}
     EXPECTED_UNLINK = {fs.tests_dir / 'stpd-cache/file', netort_dir / 'http' / 'file', netort_dir / 's3' / 'file'}
 
     unlinked_files = set()
 
     rm_cf = ResourceManagerConfig()
-    rm_cf.tmp_path = netort_dir.absolute().as_posix()
+    rm_cf.tmp_path = netort_dir
     rm = ResourceManager(rm_cf)
     with patch.object(FilesystemCleanup, '_get_free_space', return_value=0):
         with patch('shutil.rmtree') as patch_rmtree:
