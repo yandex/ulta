@@ -304,13 +304,13 @@ class TankClient:
     def parse_job_status(job_status_json: dict) -> JobStatus:
         error, error_type = TankClient.extract_error(job_status_json)
         exit_code = job_status_json.get('exit_code')
-        if not error:
+        if exit_code is not None and exit_code > 0:
             if exit_code in AUTOSTOP_EXIT_CODES:
                 job_status = AdditionalJobStatus.AUTOSTOPPED
             else:
-                job_status = job_status_json.get('status_code', AdditionalJobStatus.FAILED)
+                job_status = AdditionalJobStatus.FAILED
         else:
-            job_status = AdditionalJobStatus.FAILED
+            job_status = job_status_json.get('status_code', AdditionalJobStatus.FAILED)
         return JobStatus.from_status(
             status=job_status,
             error=error,
