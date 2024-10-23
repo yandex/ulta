@@ -196,8 +196,13 @@ class TankClient:
         [u.stop() for u in self._background_workers]
         self._background_workers = []
         self._finalizers = []
-        if self.tank_worker is not None and self.tank_worker.is_alive():
-            self.tank_worker.kill()
+        if self.tank_worker is not None:
+            if self.tank_worker.is_alive():
+                self.tank_worker.kill()
+            errors = self.tank_worker.cleanup()
+            for e in errors:
+                self.logger.warning('Error occured during TankWorker.cleanup', exc_info=e)
+
         self.tank_worker = None
         self._tank_worker_start_shooting_event = None
 
