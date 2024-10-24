@@ -14,6 +14,8 @@ from ulta.common.job import Job, JobPluginType
 DEFAULT_STPD_CACHE_TTL = 7 * 86400
 DEFAULT_NETORT_CACHE_TTL = 7 * 86400
 
+ROOT_DIR = Path('/')
+
 
 class FilesystemCleanup:
     def __init__(
@@ -80,13 +82,22 @@ class FilesystemCleanup:
             dict(stage=stage, path=path, free_space=self._get_free_space(path)),
         )
 
+    def _is_good_dir(self, path: Path, title: str) -> bool:
+        path = path.resolve()
+        if not path.exists() or not path.is_dir():
+            self._logger.warning(f'{title} folder is not found')
+            return False
+        if path == ROOT_DIR:
+            self._logger.warning(f'{title} folder is root')
+            return False
+        return True
+
     def _is_forbiden_dir(self, path: Path) -> bool:
         return path.resolve() in self._forbiden_dirs
 
     @_log_errors
     def _cleanup_temporary_dir(self):
-        if not self._fs.tmp_dir.exists():
-            self._logger.debug('temporary folder is not found')
+        if not self._is_good_dir(self._fs.tmp_dir, 'temporary'):
             return
 
         self._log_free_space('before', self._fs.tmp_dir)
@@ -100,8 +111,7 @@ class FilesystemCleanup:
 
     @_log_errors
     def _remove_old_tests_dirs(self):
-        if not self._fs.tests_dir.exists():
-            self._logger.debug('tests folder is not found')
+        if not self._is_good_dir(self._fs.tests_dir, 'tests folder'):
             return
 
         self._log_free_space('before', self._fs.tests_dir)
@@ -121,8 +131,7 @@ class FilesystemCleanup:
 
     @_log_errors
     def _remove_old_stpd_cache_files(self):
-        if not self._stpd_cache_dir.exists():
-            self._logger.debug('stpd cache folder is not found')
+        if not self._is_good_dir(self._stpd_cache_dir, 'stpd cache'):
             return
 
         self._log_free_space('before', self._stpd_cache_dir)
@@ -149,21 +158,14 @@ class FilesystemCleanup:
             return
 
         netort_dir = Path(self._resource_manager.tmp_path_prefix)
-        if not netort_dir.exists():
-            self._logger.debug('netort forlder is not exists')
+        if not self._is_good_dir(netort_dir, 'netort'):
             return
 
         self._log_free_space('before', netort_dir)
-        netort_dirs = set(
-            Path(op.factory.keywords['path_provider'].prefix)
-            for op in self._resource_manager.openers
-            if hasattr(op.factory, 'keywords') and 'path_provider' in op.factory.keywords
-        )
         netort_objects = sorted(
-            [(f, f.stat().st_ctime) for d in netort_dirs if d.exists() for f in d.rglob('*') if f.is_file()],
+            [(f, f.stat().st_ctime) for f in netort_dir.rglob('*downloaded_resource*') if f.is_file()],
             key=lambda f: f[1],
         )
-
         time_threshold = time.time() - self._netort_cache_ttl
         for f, f_ctime in netort_objects:
             if f_ctime > time_threshold and self._get_free_space(netort_dir) >= self._job_disk_limit:

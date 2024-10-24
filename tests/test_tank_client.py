@@ -159,14 +159,12 @@ def test_filesystem_cleanup(work_dir, lock_dir, netort_dir):
         fs.tests_dir / 'lunapark': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         fs.tests_dir / 'lunapark' / '123456': os.stat_result((stat.S_IFLNK, 0, 0, 0, 0, 0, 0, *ftimes_now)),
         netort_dir: os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
-        netort_dir / 'http': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
-        netort_dir / 'http' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
-        netort_dir / 's3': os.stat_result((stat.S_IFDIR, 0, 0, 0, 0, 0, 0, *ftimes_now)),
-        netort_dir / 's3' / 'file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
+        netort_dir / 'http_file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
+        netort_dir / 's3_file': os.stat_result((stat.S_IFREG, 0, 0, 0, 0, 0, 1024, *ftimes_now)),
     }
     FILES.update({k.resolve(): v for k, v in FILES.items()})
     EXPECTED_RMTREE = {fs.tests_dir / 'old_id', fs.tmp_dir / 'old_id'}
-    EXPECTED_UNLINK = {fs.tests_dir / 'stpd-cache/file', netort_dir / 'http' / 'file', netort_dir / 's3' / 'file'}
+    EXPECTED_UNLINK = {fs.tests_dir / 'stpd-cache/file', netort_dir / 'http_file', netort_dir / 's3_file'}
 
     unlinked_files = set()
 
