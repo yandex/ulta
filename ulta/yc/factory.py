@@ -1,6 +1,10 @@
+import dataclasses
 import grpc
+import uuid
 
+from collections import OrderedDict
 from functools import lru_cache
+from typing import Any
 
 from ulta.common.agent import AgentInfo
 from ulta.common.config import UltaConfig
@@ -84,10 +88,42 @@ class YCFactory(ClientFactory):
         )
 
 
+@dataclasses.dataclass
+class _ClientCallDetails(grpc.ClientCallDetails):
+    method: Any
+    timeout: Any
+    metadata: Any
+    credentials: Any
+    wait_for_ready: Any
+    compression: Any
+
+
+class _TrackersInterceptor(grpc.UnaryUnaryClientInterceptor):
+    def intercept_unary_unary(self, continuation, client_call_details, request):
+        ccd: _ClientCallDetails = client_call_details
+        dict_meta = OrderedDict(ccd.metadata if ccd.metadata else ())
+        dict_meta.setdefault('x-client-request-id', str(uuid.uuid4()))
+        dict_meta.setdefault('x-client-trace-id', str(uuid.uuid4()))
+
+        return continuation(
+            _ClientCallDetails(
+                method=ccd.method,
+                timeout=ccd.timeout,
+                metadata=tuple(dict_meta.items()),
+                credentials=ccd.credentials,
+                wait_for_ready=ccd.wait_for_ready,
+                compression=ccd.compression,
+            ),
+            request,
+        )
+
+
 class ChannelFactory:
     @lru_cache
     def get_channel(self, url: str, channel_options=None, insecure_connection=False) -> grpc.Channel:
-        return create_cloud_channel(url, insecure_connection, channel_options)
+        ch = create_cloud_channel(url, insecure_connection, channel_options)
+        ch = grpc.intercept_channel(ch, _TrackersInterceptor())
+        return ch
 
 
 def use_compute_metadata(config: UltaConfig) -> bool:

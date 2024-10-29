@@ -6,6 +6,7 @@ import sys
 
 from queue import Queue, Full
 from ulta.common.config import UltaConfig
+from ulta.common.utils import TrackRequestHeaders, exception_grpc_metadata
 
 
 class LogMessage:
@@ -83,8 +84,33 @@ def _create_stdout_handler():
     return handler
 
 
+def _exception_trackers_str(err: Exception) -> str | None:
+    grpc_metadata = exception_grpc_metadata(err)
+    if grpc_metadata is not None:
+        headers = TrackRequestHeaders.from_grpc_metadata(grpc_metadata)
+        if not any(bool(v) for _, v in headers.items()):
+            return None
+
+        fence_str = '###############'
+        data_str = '\n'.join(f'# {k}: {v or ""}' for k, v in headers.items())
+        return f'{fence_str}\n{data_str}\n{fence_str}'
+
+    return None
+
+
+class _DefaultFormatter(logging.Formatter):
+    def formatException(self, ei) -> str:
+        res = super().formatException(ei)
+        if isinstance(ei[1], Exception):
+            if trackers_str := _exception_trackers_str(ei[1]):
+                res += '\n'
+                res += trackers_str
+
+        return res
+
+
 def _create_default_formatter():
-    return logging.Formatter('%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d\t%(message)s')
+    return _DefaultFormatter('%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d\t%(message)s')
 
 
 class SinkHandler(logging.Handler):

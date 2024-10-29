@@ -1,10 +1,11 @@
+import dataclasses
 import functools
 import grpc
 import re
 import typing
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from google.api_core.exceptions import from_grpc_error
+from google.api_core.exceptions import from_grpc_error, GoogleAPICallError
 from google.protobuf.timestamp_pb2 import Timestamp
 from tenacity import Retrying, wait_fixed, retry_if_exception, stop_after_attempt
 
@@ -22,6 +23,54 @@ def catch_exceptions(func: typing.Callable):
             raise from_grpc_error(error) from error
 
     return wrapper
+
+
+@dataclasses.dataclass
+class TrackRequestHeaders:
+    client_request_id: str | None
+    client_trace_id: str | None
+    server_request_id: str | None
+    server_trace_id: str | None
+
+    @classmethod
+    def from_grpc_metadata(cls, metadata: typing.Mapping[str, str]) -> 'TrackRequestHeaders':
+        return cls(
+            client_request_id=extract_metadata_value(metadata, 'x-client-request-id'),
+            client_trace_id=extract_metadata_value(metadata, 'x-client-trace-id'),
+            server_request_id=extract_metadata_value(metadata, 'x-request-id', 'x-server-request-id'),
+            server_trace_id=extract_metadata_value(metadata, 'x-trace-id', 'x-server-request-id'),
+        )
+
+    def items(self) -> typing.Sequence[tuple[str, str | None]]:
+        return (
+            ('client-request-id', self.client_request_id),
+            ('client-trace-id', self.client_trace_id),
+            ('server-request-id', self.server_request_id),
+            ('server-trace-id', self.server_trace_id),
+        )
+
+
+def extract_metadata_value(metadata: typing.Mapping[str, str], *names: str) -> str | None:
+    for n in names:
+        v = metadata.get(n.casefold(), None)
+        if v is not None:
+            return v
+
+    return None
+
+
+def exception_grpc_metadata(err: Exception) -> dict[str, str]:
+    call = None
+    if isinstance(err, GoogleAPICallError):
+        if isinstance(err.response, grpc.Call):
+            call = err.response
+    elif isinstance(err, grpc.Call):
+        call = err
+
+    if call is None:
+        return {}
+
+    return dict(call.initial_metadata())
 
 
 def normalize_path(path: Path | str | None) -> Path | str:
