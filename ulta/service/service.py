@@ -26,10 +26,11 @@ from ulta.common.file_system import ensure_dir
 from ulta.common.interfaces import LoadtestingClient, S3Client, NamedService
 from ulta.common.job_status import AdditionalJobStatus, JobStatus, FINISHED_STATUSES_TO_EXIT_CODE_MAPPING
 from ulta.common.job import Job, JobResult, ArtifactSettings
-from ulta.common.logging import get_logger, get_event_logger
+from ulta.common.logging import get_logger
 from ulta.common.state import State, GenericObserver
 from ulta.service.artifact_uploader import ArtifactUploader
 from ulta.service.tank_client import TankClient, TankStatus, INTERNAL_ERROR_TYPE
+from ulta.service.service_context import LabelContext
 
 LOCK_DIR = '/var/lock'
 FINISHED_FILE = 'finish_status.yaml'
@@ -46,12 +47,11 @@ class UltaService:
         sleep_time: float,
         artifact_uploaders: Iterable[NamedService[ArtifactUploader]],
         cancellation: Cancellation,
+        label_context: LabelContext,
         max_waiting_time: int = 300,
         logger: logging.Logger | None = None,
-        event_logger: logging.Logger | None = None,
     ):
         self.logger = logger or get_logger()
-        self.event_logger = event_logger or get_event_logger()
 
         self.cancellation = cancellation
         self.tmp_dir = tmp_dir
@@ -62,6 +62,7 @@ class UltaService:
         self.job_pooling_delay = sleep_time
         self.artifact_uploaders = artifact_uploaders
         self.max_waiting_time = max_waiting_time
+        self.label_context = label_context
         self._override_status: TankStatus | None = None
         self._observer = GenericObserver(state, self.logger, cancellation)
 
@@ -142,11 +143,11 @@ class UltaService:
     def _report_job_finish_event(self, job: Job, status: JobStatus):
         msg = ['Test %(test_id)s execution completed with status %(status)s']
         labels = dict(test_id=job.id, internal_id=job.tank_job_id, status=status.status)
-        report_func = self.event_logger.info
+        report_func = self.logger.info
         if status.error:
             msg.append('error: %(error)s')
             labels['error'] = status.error
-            report_func = self.event_logger.error
+            report_func = self.logger.error
         report_func(', '.join(msg), labels)
 
     def get_job(self, job_id: str | None = None) -> Job | None:
@@ -160,7 +161,7 @@ class UltaService:
             return None
 
         job = Job(id=job_message.id)
-        self.event_logger.info('Got new test %(test_id)s for execution', dict(test_id=job.id))
+        self.logger.info('Got new test %(test_id)s for execution', dict(test_id=job.id))
         try:
             test_data_dir = ensure_dir(self.tmp_dir / f'test_data_{job_message.id}')
             job.log_group_id = job_message.logging_log_group_id
@@ -268,8 +269,9 @@ class UltaService:
             while not self.cancellation.is_set():
                 with self.sustain_service():
                     job = self.wait_for_a_job()
-                    job = self.execute_job(job)
-                    self.publish_artifacts(job)
+                    with self.label_context(labels={'test_id': job.id}):
+                        job = self.execute_job(job)
+                        self.publish_artifacts(job)
                 time.sleep(self.sleep_time)
         finally:
             self.logger.warning('Ulta agent is stopped')
@@ -281,8 +283,9 @@ class UltaService:
                 raise JobNotExecutedError(f'Unable to find cloud job with id {job_id}')
             if job.id != job_id:
                 raise JobNotExecutedError(f'Requested cloud job {job_id}, got: {job.id}')
-            job = self.execute_job(job)
-            self.publish_artifacts(job)
+            with self.label_context(labels={'test_id': job.id}):
+                job = self.execute_job(job)
+                self.publish_artifacts(job)
             return job.result()
         except Exception as e:
             self.logger.exception('Job execution failed for test_id %s', dict(test_id=job_id, error=e))
@@ -294,7 +297,7 @@ class UltaService:
             self.logger.info('Starting test execution %(test_id)s', dict(test_id=job.id))
 
             job = self.tank_client.prepare_job(job, self._get_job_data_paths(job.test_data_dir))
-            self.event_logger.info(
+            self.logger.info(
                 'Test %(test_id)s prepare step is finished',
                 dict(test_id=job.id, internal_id=job.tank_job_id),
             )
@@ -316,7 +319,7 @@ class UltaService:
             # but we should try to report error message anyway
             self.claim_job_failed(job, f'Backend rejected current job: {str(e)}', 'FAILED')
         except TankError as e:
-            self.event_logger.error(
+            self.logger.error(
                 'Test %(test_id)s has been interrupted due to YandexTank error %(error)s',
                 dict(test_id=job.id, internal_id=job.tank_job_id, error=str(e)),
             )
@@ -324,7 +327,7 @@ class UltaService:
         finally:
             self.tank_client.stop_job()
             self.tank_client.finish()
-            self.event_logger.info(
+            self.logger.info(
                 'Cleanup completed for test %(test_id)s',
                 dict(
                     test_id=job.id,
@@ -343,7 +346,7 @@ class UltaService:
                     continue
                 try:
                     uploader.service.publish_artifacts(job)
-                    self.event_logger.info(
+                    self.logger.info(
                         'Publish artifacts to %(publisher)s completed',
                         dict(publisher=uploader.name, test_id=job.id, internal_id=job.tank_job_id),
                     )
@@ -352,7 +355,7 @@ class UltaService:
                         job, f'Artifact uploading has been interrupted: {str(error)}', 'ARTIFACT_UPLOADING_FAILED'
                     )
                 except Exception as error:
-                    self.event_logger.exception(
+                    self.logger.exception(
                         'Failed to publish artifacts to %(publisher)s',
                         dict(publisher=uploader.name, test_id=job.id, internal_id=job.tank_job_id),
                     )
@@ -375,7 +378,7 @@ class UltaService:
         try:
             yield
         except CancellationRequest:
-            self.event_logger.info('Terminating service...')
+            self.logger.info('Terminating service...')
         except Exception:
-            self.event_logger.exception('Unhandled exception occured. Abandoning pending job...')
+            self.logger.exception('Unhandled exception occured. Abandoning pending job...')
             return True

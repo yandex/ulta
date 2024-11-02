@@ -1,6 +1,7 @@
 import pytest
+import logging
 from datetime import timedelta
-from ulta.common.utils import str_to_timedelta, truncate_string
+from ulta.common.utils import str_to_timedelta, truncate_string, as_bool, str_to_loglevel
 
 
 @pytest.mark.parametrize(
@@ -54,3 +55,40 @@ def test_str_to_timedelta_exception(value):
 )
 def test_truncate_string(original, length, in_middle, expected):
     assert truncate_string(original, length, in_middle) == expected
+
+
+@pytest.mark.parametrize(
+    'value, expected',
+    [
+        (None, False),
+        (True, True),
+        (False, False),
+        ('', False),
+        ('yes', True),
+        ('YES  ', True),
+        ('true', True),
+        ('False', False),
+        ('no', False),
+        (0, False),
+        (111, True),
+    ],
+)
+def test_as_bool(value, expected):
+    assert as_bool(value) == expected
+
+
+@pytest.mark.parametrize(
+    'value, expected',
+    [
+        (None, logging.NOTSET),
+        ('', logging.NOTSET),
+        ('NOTSET', logging.NOTSET),
+        ('DEBUG  ', logging.DEBUG),
+        ('disabled', logging.NOTSET),
+        ('INFO  ', logging.INFO),
+        (0, logging.NOTSET),
+        (10, logging.DEBUG),
+    ],
+)
+def test_str_to_loglevel(value, expected):
+    assert str_to_loglevel(value) == expected

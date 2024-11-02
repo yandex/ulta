@@ -16,8 +16,7 @@ from yandex.cloud.loadtesting.agent.v1 import (
 )
 
 from ulta.common.agent import AgentInfo
-from ulta.common.interfaces import RemoteLoggingClient
-from ulta.common.logging import LogMessage
+from ulta.common.interfaces import RemoteLoggingClient, LogMessage
 from ulta.common.utils import catch_exceptions, retry_lt_client_call, float_to_proto_timestamp
 from ulta.yc.ycloud import METADATA_AGENT_VERSION_ATTR, TokenProviderProtocol
 from ulta.yc.trail_helper import prepare_trail_data, prepare_monitoring_data

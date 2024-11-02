@@ -74,6 +74,7 @@ class TankClient:
         data_uploader_api_address: str,
         tank_worker_timeout: int = TANK_WORKER_TIMEOUT,
         variables: TankVariables | None = None,
+        additional_tank_log_handlers: list[logging.Handler] | None = None,
     ):
         self.logger = logger
         self.fs = fs
@@ -86,6 +87,7 @@ class TankClient:
         self._finalizers: list[JobFinalizer] = []
         self._tank_worker_timeout = tank_worker_timeout
         self._variables = variables
+        self._additional_tank_log_handlers = additional_tank_log_handlers or []
 
     def _generate_job_config_patches(self, job: Job) -> list:
         patch = {
@@ -159,6 +161,7 @@ class TankClient:
                 run_shooting_event=self._tank_worker_start_shooting_event,
                 resource_manager=resource_manager,
                 plugins_implicit_enabling=True,
+                log_handlers=self._additional_tank_log_handlers,
             )
             self.tank_worker.collect_files()
             self.tank_worker.go_to_test_folder()

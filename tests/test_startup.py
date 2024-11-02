@@ -1,5 +1,7 @@
 from ulta.service.command import run_service, register_loadtesting_agent
 from ulta.service.service import UltaService
+from ulta.service.service_context import LabelContext
+from ulta.service.tank_client import TankClient
 from ulta.common.agent import AgentInfo, AgentOrigin
 from ulta.common.config import UltaConfig
 from ulta.common.cancellation import Cancellation
@@ -37,17 +39,27 @@ def test_run_service_smoke(serve_single_job, transport_factory, fs_mock: FS):
     factory_mock = mock.Mock(spec=ClientFactory)
     transport_factory.return_value = factory_mock
     serve_single_job.return_value = JobResult(status='OK', exit_code=0)
+    logger = logging.getLogger(__name__)
+    agent = AgentInfo(
+        id='agent_id', name='agent_name', version=None, origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id'
+    )
+    tank_client = TankClient(
+        logger=logger,
+        fs=fs_mock,
+        loadtesting_client=transport_factory.create_job_data_uploader_client(agent),
+        data_uploader_api_address=config.backend_service_url,
+    )
     assert (
         run_service(
             config=config,
             cancellation=cancellation,
             service_state=State(),
             transport_factory=transport_factory,
-            agent=AgentInfo(
-                id='agent_id', name='agent_name', version=None, origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id'
-            ),
+            agent=agent,
             fs=fs_mock,
-            logger=logging.getLogger(__name__),
+            logger=logger,
+            label_context=LabelContext(),
+            tank_client=tank_client,
         )
         == 0
     )

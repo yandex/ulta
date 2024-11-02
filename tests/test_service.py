@@ -27,6 +27,7 @@ from ulta.common.state import State
 from ulta.common.cancellation import Cancellation
 from ulta.service.tank_client import TankClient, TankStatus
 from ulta.service.service import UltaService
+from ulta.service.service_context import LabelContext
 from ulta.service.status_reporter import StatusReporter
 from ulta.common.exceptions import (
     JobStoppedError,
@@ -75,6 +76,7 @@ def ulta_service():
             sleep_time=0.1,
             artifact_uploaders=MagicMock(),
             cancellation=cancellation,
+            label_context=LabelContext(),
         )
 
 

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from ulta.cli_args import CliArgs, Command, parse_str_as_key_values, parse_str_as_list_values, parse_cli_args
 from ulta.common.config import UltaConfig, DEFAULT_ENVIRONMENT, ExternalConfigLoader
 from ulta.common.module import load_plugins
-from ulta.common.utils import normalize_path, get_and_convert, str_to_timedelta
+from ulta.common.utils import normalize_path, get_and_convert, str_to_timedelta, as_bool
 from ulta.version import VERSION
 
 CONFIG_PATH_ENV = 'LOADTESTING_AGENT_CONFIG'
@@ -88,6 +88,8 @@ class _ConfigBuilder:
             config.agent_version = VERSION
             config.no_cache = False
             config.instance_lt_created = False
+            config.report_log_events = True
+            config.report_yandextank_log_events_level = 'INFO'
 
     def load_file_config(self, config_path: str):
         config_path = normalize_path(config_path)
@@ -113,6 +115,8 @@ class _ConfigBuilder:
             config.log_group_id = content.get('log_group_id')
             config.log_path = content.get('log_path', content.get('logging_path'))
             config.log_level = content.get('log_level', content.get('logging_level'))
+            config.report_log_events = get_and_convert(content.get('report_log_events'), as_bool)
+            config.report_yandextank_log_events_level = content.get('report_yandextank_log_events_level')
             config.request_interval = get_and_convert(
                 content.get('request_interval', content.get('request_frequency')), int
             )
@@ -143,6 +147,8 @@ class _ConfigBuilder:
             config.log_group_id = os.getenv('LOADTESTING_LOG_REMOTE_STORAGE')
             config.log_path = os.getenv('LOADTESTING_LOG_PATH')
             config.log_level = os.getenv('LOADTESTING_LOG_LEVEL')
+            config.report_log_events = get_and_convert(os.getenv('LOADTESTING_REPORT_LOG_EVENTS'), as_bool)
+            config.report_yandextank_log_events_level = os.getenv('LOADTESTING_REPORT_YANDEXTANK_LOG_EVENTS_LEVEL')
             config.agent_name = os.getenv('LOADTESTING_AGENT_NAME')
             config.folder_id = os.getenv('LOADTESTING_FOLDER_ID')
             config.service_account_key_path = os.getenv('LOADTESTING_SA_KEY_FILE')
@@ -191,9 +197,12 @@ class _ConfigBuilder:
             config.netort_resource_manager = args.netort_resource_manager
             config.plugins = args.plugins
             config.log_group_id = args.log_group_id
+            config.report_yandextank_log_events_level = args.report_yandextank_log_events_level
 
             if args.no_cache:
                 config.no_cache = args.no_cache
+            if args.no_report_log_events:
+                config.report_log_events = not args.no_report_log_events
 
     def resolve_paths(self):
         with self.next_source('resolve_paths', modified_only=True) as config:

@@ -121,6 +121,8 @@ EXPECTED_CONFIG = UltaConfig(
     labels={'l1': 'v1', 'purpose': 'test'},
     aws_access_key_id='aws_access_key_id_12345',
     aws_secret_access_key='aws_access_key_id_secretsecret',
+    report_log_events=True,
+    report_yandextank_log_events_level='DEBUG',
 )
 
 
@@ -173,6 +175,8 @@ def test_load_args_config():
             iam_service_url='iam.domain.huh',
             logging_service_url='logging-ingester.ddd',
             object_storage_url='s3.amazon.maybe',
+            no_report_log_events=False,
+            report_yandextank_log_events_level='DEBUG',
         )
     )
 
@@ -216,6 +220,8 @@ def test_load_env_config():
             'LOADTESTING_LOG_REMOTE_STORAGE': 'sheesh_very_unique_group',
             'LOADTESTING_LOG_PATH': '/var/logs/superlogs',
             'LOADTESTING_LOG_LEVEL': 'VERYCUSTOM',
+            'LOADTESTING_REPORT_LOG_EVENTS': 'YES',
+            'LOADTESTING_REPORT_YANDEXTANK_LOG_EVENTS_LEVEL': 'DEBUG',
             'LOADTESTING_AGENT_NAME': 'ulta-agent',
             'LOADTESTING_FOLDER_ID': 'yc_folder_155',
             'LOADTESTING_SA_KEY_FILE': 'mnopq',

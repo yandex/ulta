@@ -38,6 +38,8 @@ class CliArgs:
 
     test_id: str | None = None
     log_group_id: str | None = None
+    no_report_log_events: bool | None = False
+    report_yandextank_log_events_level: str | None = None
 
 
 def parse_cli_args() -> CliArgs:
@@ -77,6 +79,17 @@ def _create_parser() -> argparse.ArgumentParser:
     parser.add_argument('--logging-url', dest='logging_service_url', help='Logging service URL')
     parser.add_argument('--storage-url', dest='object_storage_url', help='Object storage URL')
     parser.add_argument('--remote-log-storage', dest='log_group_id', help='ID of YC Cloud Logging log group')
+    parser.add_argument(
+        '--no-report-log-events',
+        dest='no_report_log_events',
+        action='store_true',
+        help='Disable reporting log events to loadtesting backend service.',
+    )
+    parser.add_argument(
+        '--report-yandextank-log-events-level',
+        dest='report_yandextank_log_events_level',
+        help='Report yandextank log events of specified level to loadtesting backend service: CRITICAL, ERROR, WARNING, INFO, DEBUG, DISABLED. Default: INFO',
+    )
 
     parser.add_argument(
         '--sa-id',

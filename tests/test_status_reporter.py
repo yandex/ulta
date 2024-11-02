@@ -1,18 +1,26 @@
 import logging
 import pytest
 import time
+import typing
+from dataclasses import dataclass
 from datetime import timedelta
 from queue import Queue
 from threading import Event
 from unittest.mock import MagicMock
 from ulta.common.cancellation import Cancellation
 from ulta.common.exceptions import CompositeException
-from ulta.common.reporter import Reporter, _chop
+from ulta.common.reporter import Reporter, _chop, ReporterHandlerProtocol
 from ulta.common.state import State
 from ulta.service.status_reporter import StatusReporter
 from ulta.service.tank_client import TankStatus
 from ulta.yc.ycloud import JWTError
 from google.api_core.exceptions import FailedPrecondition, NotFound, Unauthenticated, Unauthorized
+
+
+@dataclass
+class ReporterHandler(ReporterHandlerProtocol):
+    handle: typing.Callable[[str, typing.Any], None]
+    error_handler: typing.Callable[[Exception, logging.Logger], None]
 
 
 @pytest.mark.parametrize(
@@ -35,12 +43,16 @@ def test_generic_reporter(data1, data2, max_batch_size, expected_result):
     def handler(_, msg):
         processed_messages.append(msg)
 
-    def error_handler(error):
+    def error_handler(error, logger):
         logger.exception('error is not expected', exc_info=error)
         raise Exception(f'error is not expected. got {error}')
 
     reporter = Reporter(
-        q1, q2, logger=logger, handler=handler, error_handler=error_handler, max_batch_size=max_batch_size
+        q1,
+        q2,
+        logger=logger,
+        handlers=ReporterHandler(handle=handler, error_handler=error_handler),
+        max_batch_size=max_batch_size,
     )
     reporter.report()
     assert processed_messages == expected_result
@@ -55,6 +67,7 @@ def test_generic_reporter_retry_unsent_data():
 
     logger = logging.getLogger()
     processed_messages = []
+    handled_errors = []
 
     e1 = Exception(123)
     e2 = RuntimeError('hh')
@@ -68,40 +81,46 @@ def test_generic_reporter_retry_unsent_data():
 
         processed_messages.append(msg)
 
-    def error_handler(error):
-        if error in (
-            e1,
-            e2,
-        ):
+    def error_handler(error, logger):
+        handled_errors.append(error)
+        if error in (e1, e2) or isinstance(error, CompositeException):
             return
 
         logger.exception('error is not expected', exc_info=error)
         raise Exception(f'error is not expected. got {error}')
 
-    reporter = Reporter(q1, q2, logger=logger, handler=handler, error_handler=error_handler, max_batch_size=2)
-    with pytest.raises(CompositeException) as e:
-        reporter.report()
+    reporter = Reporter(
+        q1, q2, logger=logger, handlers=ReporterHandler(handle=handler, error_handler=error_handler), max_batch_size=2
+    )
+    reporter.report()
 
-    assert list(e.value.errors) == [e1, e1]
     assert processed_messages == [[0, 1], [2, 3], [13, 14]]
+    assert len(handled_errors) == 1
+    assert isinstance(handled_errors[0], CompositeException)
+    assert handled_errors[0].errors == [e1, e1]
 
-    with pytest.raises(RuntimeError, match='hh') as e:
-        reporter.report()
+    reporter.report()
 
     assert processed_messages == [[0, 1], [2, 3], [13, 14], [11, 12]]
+    assert len(handled_errors) == 2
+    assert isinstance(handled_errors[1], RuntimeError)
+    assert handled_errors[1].args == ('hh',)
 
     reporter.report()
 
     assert processed_messages == [[0, 1], [2, 3], [13, 14], [11, 12], [4, 10]]
+    assert len(handled_errors) == 2
 
 
 def test_generic_reporter_retention():
     q1 = Queue()
-    for d in range(5):
+    steps_count = 5
+    for d in range(steps_count):
         q1.put_nowait(d)
 
     logger = logging.getLogger()
     processed_messages = []
+    handled_errors = []
 
     class Nop(Exception): ...
 
@@ -109,36 +128,42 @@ def test_generic_reporter_retention():
         processed_messages.append(msg)
         raise Nop()
 
-    def error_handler(error):
-        if isinstance(error, Nop):
+    def error_handler(error, logger):
+        handled_errors.append(error)
+        if isinstance(error, (Nop, CompositeException)):
             return
 
         logger.exception('error is not expected', exc_info=error)
         raise Exception(f'error is not expected. got {error}')
 
+    reporter_handler = ReporterHandler(handle=handler, error_handler=error_handler)
     reporter = Reporter(
         q1,
         logger=logger,
-        handler=handler,
-        error_handler=error_handler,
+        handlers=reporter_handler,
         max_batch_size=1,
         retention_period=timedelta(milliseconds=100),
     )
 
-    with pytest.raises(CompositeException) as e:
-        reporter.report()
+    reporter.report()
 
-    assert all(isinstance(e, Nop) for e in e.value.errors)
+    assert len(handled_errors) == 1
+    assert isinstance(handled_errors[0], CompositeException)
+    assert all(isinstance(e, Nop) for e in handled_errors[0].errors)
+
     assert processed_messages == [[0], [1], [2], [3], [4]]
-    assert len(reporter._unsent_messages) == 5
+    assert id(reporter_handler) in reporter._unsent_messages
+    assert len(reporter._unsent_messages[id(reporter_handler)]) == 5
 
     processed_messages.clear()
-    with pytest.raises(CompositeException) as e:
-        reporter.report()
 
-    assert all(isinstance(e, Nop) for e in e.value.errors)
+    reporter.report()
+
+    assert len(handled_errors) == 2
+    assert isinstance(handled_errors[1], CompositeException)
+    assert all(isinstance(e, Nop) for e in handled_errors[1].errors)
     assert processed_messages == [[0], [1], [2], [3], [4]]
-    assert len(reporter._unsent_messages) == 5
+    assert len(reporter._unsent_messages[id(reporter_handler)]) == 5
 
     time.sleep(0.2)
 
@@ -146,7 +171,7 @@ def test_generic_reporter_retention():
     reporter.report()
 
     assert processed_messages == []
-    assert len(reporter._unsent_messages) == 0
+    assert len(reporter._unsent_messages[id(reporter_handler)]) == 0
 
 
 def test_generic_reporter_run():
@@ -189,7 +214,7 @@ def test_generic_reporter_run():
 
     test_finish = Event()
 
-    def error_handler(error):
+    def error_handler(error, logger):
         if not isinstance(error, Stop):
             logger.exception('error is not expected', exc_info=error)
             raise Exception(f'error is not expected. got {error}')
@@ -197,7 +222,12 @@ def test_generic_reporter_run():
         test_finish.set()
 
     reporter = Reporter(
-        q1, q2, logger=logger, handler=handler, error_handler=error_handler, max_batch_size=10, report_interval=0.1
+        q1,
+        q2,
+        logger=logger,
+        handlers=ReporterHandler(handle=handler, error_handler=error_handler),
+        max_batch_size=10,
+        report_interval=0.1,
     )
     with reporter.run():
         test_finish.wait(1)

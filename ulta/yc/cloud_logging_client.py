@@ -11,8 +11,7 @@ from yandex.cloud.logging.v1 import (
     log_resource_pb2,
 )
 from ulta.common.utils import now, float_to_proto_timestamp
-from ulta.common.interfaces import RemoteLoggingClient
-from ulta.common.logging import LogMessage
+from ulta.common.interfaces import RemoteLoggingClient, LogMessage
 from ulta.yc.ycloud import TokenProviderProtocol
 
 

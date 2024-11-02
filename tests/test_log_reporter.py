@@ -5,10 +5,15 @@ from queue import Queue
 from unittest import mock
 from ulta.common.agent import AgentInfo, AgentOrigin
 from ulta.common.config import UltaConfig
-from ulta.common.interfaces import ClientFactory
-from ulta.common.logging import LogMessage
+from ulta.common.interfaces import ClientFactory, LogMessage
 from ulta.common.reporter import NullReporter
-from ulta.service.log_reporter import make_log_reporter, make_events_reporter, LogReporter
+from ulta.service.log_reporter import (
+    make_log_reporter,
+    LogMessageProcessor,
+    CONTEXT_LABELS_KEY,
+    with_extra,
+)
+from ulta.service.service_context import LabelContext
 
 
 @pytest.fixture
@@ -30,6 +35,8 @@ def default_config():
             agent_name='agent_name',
             test_id='some_test_id',
             agent_id_file='some_file',
+            report_log_events=True,
+            report_yandextank_log_events_level='DEBUG',
             **kwargs,
         )
 
@@ -55,23 +62,25 @@ def test_log_reporter_is_null_if_no_log_group_id(default_config):
     client = mock.Mock()
     factory_mock.create_logging_client.return_value = client
     reporter = make_log_reporter(logger, config, agent, factory_mock, None)
-    assert isinstance(reporter, NullReporter)
+    assert not isinstance(reporter, NullReporter)
+    assert len(reporter._handlers) == 1
 
 
 def test_log_reporter_smoke(default_config):
     logger = logging.getLogger('some_logger')
+
     config = default_config(log_group_id='lggg_11')
     agent = AgentInfo(id='idid', name='my-name', version=None, origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id')
     factory_mock = mock.Mock(spec=ClientFactory)
     client = mock.Mock()
     factory_mock.create_logging_client.return_value = client
-    reporter = make_log_reporter(logger, config, agent, factory_mock, None)
-
+    context = LabelContext()
+    reporter = make_log_reporter(logger, config, agent, factory_mock, context)
     assert not isinstance(reporter, NullReporter)
-
-    logger.info('INFO_1 %(s)s', dict(s=1, v='okok'))
-    logger.error('ERROR_2 %s', 'ss')
-    reporter.report()
+    with context.agent(agent):
+        logger.info('INFO_1 %(s)s', dict(s=1, v='okok'))
+        logger.error('ERROR_2 %s', 'ss')
+        reporter.report()
 
     calls = client.send_log.mock_calls
     logging.info('calls: %s', calls)
@@ -85,16 +94,17 @@ def test_log_reporter_smoke(default_config):
     log_data = call_kwargs['log_data'][0]
     assert isinstance(log_data, LogMessage)
     assert log_data.message == 'INFO_1 1'
-    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 's': '1', 'v': 'okok'}
+    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 'agent_version': '', 's': '1', 'v': 'okok'}
 
     log_data = call_kwargs['log_data'][1]
     assert isinstance(log_data, LogMessage)
     assert log_data.message == 'ERROR_2 ss'
-    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name'}
+    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 'agent_version': ''}
 
 
 def test_log_reporter_consumes_cached_events(default_config):
     logger = logging.getLogger('some_logger')
+
     config = default_config(log_group_id='lggg_11')
     agent = AgentInfo(id='idid', name='my-name', version=None, origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id')
     factory_mock = mock.Mock(spec=ClientFactory)
@@ -124,11 +134,11 @@ def test_log_reporter_consumes_cached_events(default_config):
         ),
     )
 
-    reporter = make_log_reporter(logger, config, agent, factory_mock, cached)
-
-    assert not isinstance(reporter, NullReporter)
-
-    reporter.report()
+    context = LabelContext()
+    with context.agent(agent):
+        reporter = make_log_reporter(logger, config, agent, factory_mock, context, cached)
+        assert not isinstance(reporter, NullReporter)
+        reporter.report()
 
     calls = client.send_log.mock_calls
     logging.info('calls: %s', calls)
@@ -141,16 +151,21 @@ def test_log_reporter_consumes_cached_events(default_config):
     log_data = call_kwargs['log_data'][0]
     assert isinstance(log_data, LogMessage)
     assert log_data.message == 'cached event 1'
-    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name'}
+    assert log_data.labels == {
+        'agent_id': 'idid',
+        'agent_name': 'my-name',
+        'agent_version': '',
+    }
 
     log_data = call_kwargs['log_data'][1]
     assert isinstance(log_data, LogMessage)
     assert log_data.message == 'cached event 2'
-    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 'v': 'k'}
+    assert log_data.labels == {'agent_id': 'idid', 'agent_name': 'my-name', 'agent_version': '', 'v': 'k'}
 
 
 def test_loadtesting_log_reporter_smoke(default_config):
     logger = logging.getLogger('some_logger')
+
     config = default_config(log_group_id='lggg_11')
     agent = AgentInfo(
         id='idid', name='my-name', version='1.2.3', origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id'
@@ -158,12 +173,15 @@ def test_loadtesting_log_reporter_smoke(default_config):
     factory_mock = mock.Mock(spec=ClientFactory)
     client = mock.Mock()
     factory_mock.create_events_log_client.return_value = client
-    reporter = make_events_reporter(logger, config, agent, factory_mock)
+    context = LabelContext()
 
+    reporter = make_log_reporter(logger, config, agent, factory_mock, context)
     assert not isinstance(reporter, NullReporter)
 
-    logger.info('INFO_1 %(s)s', dict(s=1, v='okok'))
-    logger.error('ERROR_2 %s', 'ss')
+    with context.agent(agent):
+        logger.info('INFO_1 %(s)s', dict(s=1, v='okok'))
+        logger.error('ERROR_2 %s', 'ss')
+
     reporter.report()
 
     calls = client.send_log.mock_calls
@@ -192,6 +210,7 @@ def test_loadtesting_log_reporter_smoke(default_config):
 
 def test_loadtesting_log_reporter_with_limits(default_config):
     logger = logging.getLogger('some_logger')
+
     config = default_config(log_group_id='lggg_11')
     agent = AgentInfo(
         id='idid', name='my-name', version='1.2.3', origin=AgentOrigin.EXTERNAL, folder_id='some_folder_id'
@@ -199,16 +218,19 @@ def test_loadtesting_log_reporter_with_limits(default_config):
     factory_mock = mock.Mock(spec=ClientFactory)
     client = mock.Mock()
     factory_mock.create_events_log_client.return_value = client
-    reporter = make_events_reporter(logger, config, agent, factory_mock)
 
+    context = LabelContext()
+    reporter = make_log_reporter(logger, config, agent, factory_mock, context)
     assert not isinstance(reporter, NullReporter)
 
-    long_message = '1234567890' * 205
-    attrs = {f'attr_{i}': f'v{i}' for i in range(2000)}
-    logger.info(long_message, attrs)
+    with context.agent(agent):
+        long_message = '1234567890' * 205
+        attrs = {f'attr_{i}': f'v{i}' for i in range(2000)}
+        logger.info(long_message, attrs)
 
-    attr_with_long_value = {'vv': '1234567890' * 2000}
-    logger.info(long_message, attr_with_long_value)
+        attr_with_long_value = {'vv': '1234567890' * 2000}
+        logger.info(long_message, attr_with_long_value)
+
     reporter.report()
 
     calls = client.send_log.mock_calls
@@ -247,7 +269,7 @@ def test_loadtesting_log_reporter_with_limits(default_config):
     ],
 )
 def test_loadtesting_log_reporter_args_pair_size(args, expected_size):
-    assert LogReporter._get_args_pair_size(args) == expected_size
+    assert LogMessageProcessor._get_args_pair_size(args) == expected_size
 
 
 @pytest.mark.parametrize(
@@ -278,26 +300,25 @@ def test_loadtesting_log_reporter_args_pair_size(args, expected_size):
     ],
 )
 def test_loadtesting_log_reporter_prepare(msg, args, expected_message, expected_labels, expected_labels_len):
-    client = mock.Mock()
-    log_reporter = LogReporter(
-        '',
-        '',
-        client,
-        additional_labels={'agent_id': 'abcdf', 'some_other_value': '10500'},
+    log_reporter = LogMessageProcessor(
+        'lgg1',
+        'abcdf',
+        mock.Mock(),
+        lambda *args: None,
         max_message_length=50,
         max_labels_size=64,
     )
-    actual_msg = log_reporter.prepare_log_record(
-        logging.LogRecord(
-            name='logger_stdout',
-            level=logging.WARNING,
-            pathname='/some/path/name',
-            lineno=130,
-            msg=msg,
-            args=args,
-            exc_info=None,
-        )
+    r = logging.LogRecord(
+        name='logger_stdout',
+        level=logging.WARNING,
+        pathname='/some/path/name',
+        lineno=130,
+        msg=msg,
+        args=args,
+        exc_info=None,
     )
+    r = with_extra(r, {CONTEXT_LABELS_KEY: {'agent_id': 'abcdf', 'some_other_value': '10500'}})
+    actual_msg = log_reporter.prepare_log_record(r)
 
     expected_labels = {'agent_id': 'abcdf', 'some_other_value': '10500'} | expected_labels
     assert actual_msg.message == expected_message

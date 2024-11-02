@@ -1,7 +1,6 @@
 from typing import TypeVar, Generic, Protocol, Callable, Any
 from ulta.common.agent import AgentInfo
 from ulta.common.config import UltaConfig
-from ulta.common.logging import LogMessage
 
 T = TypeVar('T')
 
@@ -13,6 +12,14 @@ class NamedService(Generic[T]):
     def __init__(self, name: str, service: T):
         self.name = name
         self.service = service
+
+
+class LogMessage:
+    def __init__(self, *, message: str, labels: dict[str, str], level: int, created_at: float):
+        self.message = message
+        self.level = level
+        self.labels = labels
+        self.created_at = created_at
 
 
 class TankStatusClient(Protocol):

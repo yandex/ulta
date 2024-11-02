@@ -3,18 +3,12 @@ import logging.handlers
 import os
 import stat
 import sys
+import typing
 
-from queue import Queue, Full
+from queue import Full
 from ulta.common.config import UltaConfig
-from ulta.common.utils import TrackRequestHeaders, exception_grpc_metadata
-
-
-class LogMessage:
-    def __init__(self, *, message: str, labels: dict[str, str], level: int, created_at: float):
-        self.message = message
-        self.level = level
-        self.labels = labels
-        self.created_at = created_at
+from ulta.common.collections import QueueLike
+from ulta.common.utils import TrackRequestHeaders, exception_grpc_metadata, str_to_loglevel
 
 
 def init_logging(config: UltaConfig) -> logging.Logger:
@@ -24,7 +18,7 @@ def init_logging(config: UltaConfig) -> logging.Logger:
         logger.addHandler(handler)
 
     try:
-        logger.setLevel(config.log_level or logging.INFO)
+        logger.setLevel(str_to_loglevel(config.log_level, logging.INFO))
     except ValueError:
         logger.setLevel(logging.INFO)
         logger.error('Invalid log level value: %s', config.log_level)
@@ -40,12 +34,6 @@ def get_logger(name: str = 'ulta') -> logging.Logger:
     if name != 'ulta':
         name = 'ulta.' + name
     return logging.getLogger(name)
-
-
-def get_event_logger() -> logging.Logger:
-    logger = get_logger('events')
-    logger.propagate = True
-    return logger
 
 
 def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
@@ -66,7 +54,7 @@ def _create_default_handlers(config: UltaConfig) -> list[logging.Handler]:
     return handlers
 
 
-def _create_file_handler(log_file_path: str):
+def _create_file_handler(log_file_path: str) -> logging.Handler:
     if os.path.isdir(log_file_path) or os.path.dirname(log_file_path) + '/' == log_file_path:
         log_file_path = os.path.join(log_file_path, 'ulta.log')
     os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
@@ -78,7 +66,7 @@ def _create_file_handler(log_file_path: str):
     return handler
 
 
-def _create_stdout_handler():
+def _create_stdout_handler() -> logging.Handler:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_create_default_formatter())
     return handler
@@ -114,23 +102,20 @@ def _create_default_formatter():
 
 
 class SinkHandler(logging.Handler):
-    def __init__(self, sink: Queue):
+    def __init__(
+        self, sink: QueueLike, transformer: typing.Callable[[logging.LogRecord], logging.LogRecord] | None = None
+    ):
         logging.Handler.__init__(self)
         self.sink = sink
+        self.transformer = transformer
 
     def emit(self, record: logging.LogRecord):
         try:
+            if self.transformer is not None:
+                record = self.transformer(record)
             self.sink.put_nowait(record)
         except Full:
             pass
 
     def flush(self):
         pass
-
-
-def create_sink_handler(level: int | None = None, max_queue_size: int = 0):
-    # TODO: use priority deque to drop debug messages first on overflow
-    handler = SinkHandler(Queue(max_queue_size))
-    if level is not None:
-        handler.setLevel(level)
-    return handler

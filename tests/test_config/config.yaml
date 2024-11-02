@@ -22,6 +22,8 @@ private_key: 'mnopq'
 private_key_payload: 'rst'
 environment: CUSTOM_ENV
 netort_resource_manager: 'netortoverride'
+report_log_events: yes
+report_yandextank_log_events_level: 'DEBUG'
 labels:
   l1: v1
   purpose: test

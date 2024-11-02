@@ -1,6 +1,7 @@
 import dataclasses
 import functools
 import grpc
+import logging
 import re
 import typing
 from datetime import datetime, timezone, timedelta
@@ -103,10 +104,41 @@ def retry_lt_client_call(func: typing.Callable):
     return wrapper
 
 
-def get_and_convert(value, cast: typing.Callable[[typing.Any], typing.Any], none_value=None):
+def get_and_convert(
+    value: typing.Any, cast: typing.Callable[[typing.Any], typing.Any], none_value: typing.Any = None
+) -> typing.Any:
     if value is None:
         return none_value
     return cast(value)
+
+
+def as_bool(value: typing.Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() not in ('', 'false', 'no')
+    return bool(value)
+
+
+def str_to_loglevel(value: typing.Any, default=logging.NOTSET) -> int:
+    if value is None:
+        return default
+    str_value = str(value).strip().upper()
+
+    if str_value == 'DISABLED':
+        return logging.NOTSET
+    if not str_value:
+        return default
+    result = logging.getLevelNamesMapping().get(str_value)
+    if result is not None:
+        return result
+
+    try:
+        int_value = int(str_value)
+        if int_value in logging.getLevelNamesMapping().values():
+            return int_value
+    except ValueError:
+        pass
+
+    raise ValueError(f'Invalid log level {value}')
 
 
 def str_to_timedelta(value: str | int) -> timedelta:
