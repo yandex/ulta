@@ -187,7 +187,7 @@ def run_log_reporters(
             cached_logs,
         )
         if not isinstance(log_reporter, NullReporter) and yandextank_events_level > logging.NOTSET:
-            tank_log_sink = multiprocessing.Queue(100_000)
+            tank_log_sink = multiprocessing.Queue(2**14)
             tank_handler = init_log_sink(tank_log_sink, label_context=label_context)
             tank_handler.setLevel(yandextank_events_level)
             log_reporter.add_sources(tank_log_sink)
