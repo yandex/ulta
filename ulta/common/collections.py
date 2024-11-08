@@ -3,8 +3,10 @@ import typing
 from collections import deque
 from queue import Empty, Full, Queue
 
+T = typing.TypeVar('T')
 
-class Deque[T]:
+
+class Deque(typing.Generic[T]):
     def __init__(self, maxlen: int | None = None):
         self._q = deque(maxlen=maxlen)
 
