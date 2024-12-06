@@ -12,7 +12,7 @@ It uses other load generators such as JMeter, ab or phantom inside of it for
 load generation and provides a common configuration system for them and
 analytic tools for the results they produce.
 ''',
-    python_requires='>=3.10',
+    python_requires='>=3.12',
     maintainer='Yandex Load Team',
     maintainer_email='load@yandex-team.ru',
     url='http://yandex.github.io/ulta/',
@@ -50,7 +50,7 @@ analytic tools for the results they produce.
         'Topic :: Software Development :: Quality Assurance',
         'Topic :: Software Development :: Testing',
         'Topic :: Software Development :: Testing :: Traffic Generation',
-        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.12',
     ],
     entry_points={
         'console_scripts': [
