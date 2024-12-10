@@ -4,6 +4,7 @@
   "Dockerfile":"load/projects/ulta/Dockerfile",
   "LICENSE.md":"load/projects/ulta/LICENSE.md",
   "README.md":"load/projects/ulta/README.md",
+  "build_files/install-with-venv.sh":"load/projects/ulta/build_files/install-with-venv.sh",
   "build_files/setup-deps.sh":"load/projects/ulta/build_files/setup-deps.sh",
   "build_files/yandextank_base_config/10-pandora.yaml":"load/projects/ulta/build_files/yandextank_base_config/10-pandora.yaml",
   "build_files/yandextank_base_config/50-loadtesting.yaml":"load/projects/ulta/build_files/yandextank_base_config/50-loadtesting.yaml",
