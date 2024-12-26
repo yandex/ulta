@@ -21,6 +21,7 @@ class State:
     def __init__(self, logger: logging.Logger | None = None):
         self._active_errors: dict[str, StateError] = {}
         self._logger = logger or get_logger()
+        self._state_stack = []
 
     @property
     def ok(self) -> bool:
@@ -32,6 +33,9 @@ class State:
     def current_errors(self) -> list[StateError]:
         return list(self._active_errors.values())
 
+    def current_state(self) -> list[str]:
+        return [s for s in self._state_stack]
+
     def error(self, stage: str, error: str | Exception):
         new_error = StateError(updated_at=now(), stage=stage, message=str(error))
         self._active_errors[new_error._hash()] = new_error
@@ -39,6 +43,17 @@ class State:
 
     def cleanup(self, stage: str):
         self._active_errors = {e._hash(): e for e in self._active_errors.values() if e.stage != stage}
+
+    @contextmanager
+    def enter_state(self, name: str):
+        try:
+            self._state_stack.append(name)
+            yield
+        finally:
+            self._state_stack.pop()
+
+    def is_alive(self) -> bool:
+        return bool(self._state_stack)
 
 
 def format_error(error: StateError) -> str:
@@ -70,7 +85,8 @@ class GenericObserver:
     ):
         exceptions = exceptions or Exception
         try:
-            yield
+            with self._state.enter_state(stage):
+                yield
         except exceptions as e:
             msg = f'The error occured at "{stage}": {str(e)}'
             if critical:

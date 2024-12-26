@@ -21,7 +21,7 @@ from ulta.common.exceptions import (
     JobStoppedError,
 )
 from ulta.common.ammo import Ammo
-from ulta.common.cancellation import Cancellation, CancellationRequest
+from ulta.common.cancellation import Cancellation, CancellationRequest, CancellationType
 from ulta.common.file_system import ensure_dir
 from ulta.common.interfaces import LoadtestingClient, S3Client, NamedService
 from ulta.common.job_status import AdditionalJobStatus, JobStatus, FINISHED_STATUSES_TO_EXIT_CODE_MAPPING
@@ -227,8 +227,8 @@ class UltaService:
     def serve_lt_job(self, job: Job):
         done = False
         while not done:
-            self.cancellation.raise_on_set()
-            with self.sustain_job():
+            self.cancellation.raise_on_set(cancellation_type=CancellationType.FORCED)
+            with self.sustain_job(job.id):
                 self.serve_lt_signal(job.id)
                 prev_job_status = None
                 sleep_due = time.time() + self.sleep_time
@@ -266,13 +266,14 @@ class UltaService:
 
     def serve(self):
         try:
-            while not self.cancellation.is_set():
-                with self.sustain_service():
-                    job = self.wait_for_a_job()
-                    with self.label_context(labels={'test_id': job.id}):
-                        job = self.execute_job(job)
-                        self.publish_artifacts(job)
-                time.sleep(self.sleep_time)
+            with self._observer.observe(stage='service alive', critical=True, suppress=False):
+                while not self.cancellation.is_set():
+                    with self.sustain_service():
+                        job = self.wait_for_a_job()
+                        with self.label_context(labels={'test_id': job.id}):
+                            job = self.execute_job(job)
+                            self.publish_artifacts(job)
+                    time.sleep(self.sleep_time)
         finally:
             self.logger.warning('Ulta agent is stopped')
 
@@ -369,9 +370,11 @@ class UltaService:
         finally:
             self._override_status = None
 
-    def sustain_job(self):
+    def sustain_job(self, job_id: str):
         exceptions = (*LOADTESTING_UNAVAILABLE_ERRORS, InternalServerError)
-        return self._observer.observe(stage='execute test', critical=False, exceptions=exceptions, suppress=True)
+        return self._observer.observe(
+            stage=f'execute test {job_id}', critical=False, exceptions=exceptions, suppress=True
+        )
 
     @contextmanager
     def sustain_service(self):

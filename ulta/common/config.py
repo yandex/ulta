@@ -18,6 +18,7 @@ class UltaConfig(BaseModel):
     netort_resource_manager: str | None = None
 
     no_cache: bool = False
+    state_api_port: int = 0
 
     backend_service_url: str
     iam_service_url: str

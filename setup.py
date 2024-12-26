@@ -35,6 +35,7 @@ analytic tools for the results they produce.
         'tenacity',
         'boto3>=1.34.0',
         'cachetools>=5.3.0',
+        'aiohttp>=3.9.5',
     ],
     tests_require=['pytest>=7.4.4', 'flake8', 'pytest-benchmark', 'zipp==0.5.1', 'mock'],
     license='Apache',

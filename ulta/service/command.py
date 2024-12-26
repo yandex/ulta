@@ -10,6 +10,7 @@ from ulta.common.config import UltaConfig
 from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
 from ulta.common.logging import get_root_logger, get_logger, SinkHandler
 from ulta.common.module import load_class
+from ulta.service.api import state_api
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.loadtesting_agent_service import (
     register_loadtesting_agent,
@@ -130,13 +131,14 @@ def run_service(
     file_system_hc = FileSystemObserver(fs, service_state, logger, cancellation)
     observer = GenericObserver(service_state, logger, cancellation)
     with HealthCheck(observer, [file_system_hc]).run_healthcheck():
-        with status_reporter.run():
-            if config.test_id:
-                result = service.serve_single_job(config.test_id)
-                return result.exit_code
-            else:
-                service.serve()
-                return 0 if service_state.ok else 1
+        with serve_state_api(config, service_state, cancellation, logger):
+            with status_reporter.run():
+                if config.test_id:
+                    result = service.serve_single_job(config.test_id)
+                    return result.exit_code
+                else:
+                    service.serve()
+                    return 0 if service_state.ok else 1
 
 
 def _get_tank_variables(transport_factory: ClientFactory, config: UltaConfig):
@@ -234,3 +236,15 @@ def setup_plugins(config: UltaConfig, logger: logging.Logger):
         TankClient.use_resource_manager(lambda *args: resource_manager())
     else:
         TankClient.use_resource_manager(lambda *args: make_resource_manager())
+
+
+@contextlib.contextmanager
+def serve_state_api(config: UltaConfig, state: State, cancellation: Cancellation, logger: logging.Logger):
+    try:
+        if config.state_api_port > 0:
+            with state_api(state, cancellation, config.state_api_port, logger):
+                yield
+        else:
+            yield
+    finally:
+        pass

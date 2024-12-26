@@ -541,7 +541,7 @@ def test_supress_non_critical_errors_strategy_sustain_job_raises_critical_errors
     ulta_service: UltaService, expected_exception
 ):
     with pytest.raises(expected_exception):
-        with ulta_service.sustain_job():
+        with ulta_service.sustain_job('job_id'):
             raise expected_exception('')
 
 
@@ -555,7 +555,7 @@ def test_supress_non_critical_errors_strategy_sustain_job_raises_critical_errors
     ],
 )
 def test_supress_non_critical_errors_strategy_sustain_job(ulta_service: UltaService, expected_exception):
-    with ulta_service.sustain_job():
+    with ulta_service.sustain_job('job_id'):
         raise expected_exception
 
 

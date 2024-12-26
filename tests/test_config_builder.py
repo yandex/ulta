@@ -89,6 +89,7 @@ EXPECTED_CONFIG = UltaConfig(
     agent_id_file='path/to/agent_id_file',
     agent_name='ulta-agent',
     agent_version='15.2.11',
+    state_api_port=6055,
     backend_service_url='loadtesting.somewhere.com:3320',
     reporter_interval=11,
     command='GO',
@@ -185,6 +186,7 @@ def test_load_args_config():
         EXPECTED_CONFIG,
         [
             'agent_version',
+            'state_api_port',
             'compute_instance_id',
             'instance_lt_created',
             'request_interval',
@@ -217,6 +219,7 @@ def test_load_env_config():
             'LOADTESTING_AGENT_ID_FILE': 'path/to/agent_id_file',
             'WORK_DIR': '~/.ulta',
             'LOCK_DIR': '/var/locks/dirs',
+            'ULTA_SERVE_STATE_API_PORT': '6055',
             'LOADTESTING_LOG_REMOTE_STORAGE': 'sheesh_very_unique_group',
             'LOADTESTING_LOG_PATH': '/var/logs/superlogs',
             'LOADTESTING_LOG_LEVEL': 'VERYCUSTOM',
