@@ -10,7 +10,10 @@ from ulta.common.background_worker import run_background_worker
 from ulta.common.cancellation import Cancellation, CancellationType
 from ulta.common.interfaces import TankStatusClient
 from ulta.common.state import State as ServiceState
+from ulta.common.utils import truncate_string
 from ulta.service.tank_client import TankStatusProvider, TankStatus, IDLE_STATUSES
+
+CLAIM_STATUS_MESSAGE_LIMIT = 8000
 
 
 class StatusReporter:
@@ -37,7 +40,9 @@ class StatusReporter:
             status = TankStatus.ERROR
             status_message = self.service_state.get_summary_message()
 
-        self.loadtesting_client.claim_tank_status(status.name, status_message)
+        self.loadtesting_client.claim_tank_status(
+            status.name, truncate_string(status_message, CLAIM_STATUS_MESSAGE_LIMIT, cut_in_middle=True)
+        )
 
     @contextmanager
     def run(self):
