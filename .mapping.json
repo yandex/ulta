@@ -72,7 +72,6 @@
   "ulta/service/artifact_uploader.py":"load/projects/ulta/ulta/service/artifact_uploader.py",
   "ulta/service/command.py":"load/projects/ulta/ulta/service/command.py",
   "ulta/service/data_uploader.py":"load/projects/ulta/ulta/service/data_uploader.py",
-  "ulta/service/filesystem_cleanup.py":"load/projects/ulta/ulta/service/filesystem_cleanup.py",
   "ulta/service/imbalance_detector.py":"load/projects/ulta/ulta/service/imbalance_detector.py",
   "ulta/service/interfaces.py":"load/projects/ulta/ulta/service/interfaces.py",
   "ulta/service/loadtesting_agent_service.py":"load/projects/ulta/ulta/service/loadtesting_agent_service.py",

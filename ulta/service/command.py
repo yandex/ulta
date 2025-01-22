@@ -128,7 +128,7 @@ def run_service(
         )
     )
 
-    file_system_hc = FileSystemObserver(fs, service_state, logger, cancellation)
+    file_system_hc = FileSystemObserver(fs, service_state, service.prevent_job_execution, logger, cancellation)
     observer = GenericObserver(service_state, logger, cancellation)
     with HealthCheck(observer, [file_system_hc]).run_healthcheck():
         with serve_state_api(config, service_state, cancellation, logger):

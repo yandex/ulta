@@ -9,7 +9,7 @@ from yandextank.core.tankcore import JobsStorage
 
 from ulta.common.agent import AgentInfo
 from ulta.common.ammo import Ammo
-from ulta.common.file_system import FS, FileSystemObserver
+from ulta.common.file_system import FS, FilesystemUsage
 from ulta.service.service import UltaService
 from ulta.service.status_reporter import StatusReporter
 from ulta.service.tank_client import TankClient
@@ -182,7 +182,7 @@ def patch_s3_uploader_upload_artifacts():
 
 @pytest.fixture()
 def fs_mock():
-    with patch.object(FileSystemObserver, '_get_fs_usage_native', return_value={'/tmp': None}):
+    with patch.object(FilesystemUsage, '_get_fs_usage_native', return_value={Path('/tmp'): None}):
         with patch('builtins.open', mock_open()):
             with patch('os.mkdir'):
                 yield FS(

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -65,6 +66,7 @@ class UltaService:
         self.label_context = label_context
         self._override_status: TankStatus | None = None
         self._observer = GenericObserver(state, self.logger, cancellation)
+        self._job_execution_lock = threading.Lock()
 
     def get_tank_status(self) -> TankStatus:
         if self._override_status is not None:
@@ -270,9 +272,7 @@ class UltaService:
                 while not self.cancellation.is_set():
                     with self.sustain_service():
                         job = self.wait_for_a_job()
-                        with self.label_context(labels={'test_id': job.id}):
-                            job = self.execute_job(job)
-                            self.publish_artifacts(job)
+                        job = self._serve_job(job)
                     time.sleep(self.sleep_time)
         finally:
             self.logger.warning('Ulta agent is stopped')
@@ -284,15 +284,20 @@ class UltaService:
                 raise JobNotExecutedError(f'Unable to find cloud job with id {job_id}')
             if job.id != job_id:
                 raise JobNotExecutedError(f'Requested cloud job {job_id}, got: {job.id}')
-            with self.label_context(labels={'test_id': job.id}):
-                job = self.execute_job(job)
-                self.publish_artifacts(job)
+            job = self._serve_job(job)
             return job.result()
         except Exception as e:
             self.logger.exception('Job execution failed for test_id %s', dict(test_id=job_id, error=e))
             raise
 
-    def execute_job(self, job: Job) -> Job:
+    def _serve_job(self, job: Job) -> Job:
+        with self._job_execution_lock:
+            with self.label_context(labels={'test_id': job.id}):
+                job = self._execute_job(job)
+                self._publish_artifacts(job)
+                return job
+
+    def _execute_job(self, job: Job) -> Job:
         try:
             self.await_tank_is_ready()
             self.logger.info('Starting test execution %(test_id)s', dict(test_id=job.id))
@@ -340,7 +345,7 @@ class UltaService:
             )
         return job
 
-    def publish_artifacts(self, job: Job):
+    def _publish_artifacts(self, job: Job):
         with self.override_status(TankStatus.UPLOADING_ARTIFACTS):
             for uploader in self.artifact_uploaders:
                 if not uploader.service.can_publish(job):
@@ -385,3 +390,11 @@ class UltaService:
         except Exception:
             self.logger.exception('Unhandled exception occured. Abandoning pending job...')
             return True
+
+    @contextmanager
+    def prevent_job_execution(self, blocking: bool = False):
+        locked = self._job_execution_lock.acquire(blocking)
+        try:
+            yield locked
+        finally:
+            self._job_execution_lock.release()

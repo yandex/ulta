@@ -80,7 +80,7 @@ class GenericObserver:
         *,
         stage: str,
         critical: bool,
-        exceptions: type | tuple[type, ...] | None = None,
+        exceptions: type[Exception] | tuple[type[Exception], ...] | None = None,
         suppress: bool = True,
     ):
         exceptions = exceptions or Exception

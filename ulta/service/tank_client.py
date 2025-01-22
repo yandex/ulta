@@ -16,14 +16,13 @@ from yandextank.core.tankworker import TankWorker
 from yandextank.validator.validator import ValidationError
 
 from ulta.common.exceptions import TankError
-from ulta.common.file_system import FS, ensure_dir
+from ulta.common.file_system import FS, FilesystemCleanup, ensure_dir
 from ulta.common.job import Job, JobPluginType
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
 from ulta.common.interfaces import JobDataUploaderClient
 from ulta.service.data_uploader import TrailUploader, MonitoringUploader, DataPipePlugin
 from ulta.service.imbalance_detector import ImbalanceUploader, ImbalanceDetectorPlugin
 from ulta.service.interfaces import JobBackgroundWorker, JobFinalizer
-from ulta.service.filesystem_cleanup import FilesystemCleanup
 
 
 INTERNAL_ERROR_TYPE = 'internal'
@@ -135,10 +134,7 @@ class TankClient:
         try:
             FilesystemCleanup(self.logger, self.fs, job, resource_manager).cleanup()
         except Exception as e:
-            self.logger.warning(
-                'Pre-run filesystem cleanup failed: %(error)s',
-                dict(test_id=job.id, error=str(e)),
-            )
+            self.logger.warning('Pre-run filesystem cleanup failed: %(error)s', dict(test_id=job.id, error=str(e)))
 
     def prepare_job(self, job: Job, files: Iterable[str]) -> Job:
         if self._is_test_session_running():

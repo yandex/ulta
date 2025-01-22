@@ -410,7 +410,7 @@ def test_claim_job_status_on_errors(
     patch_tank_client_get_job_status.return_value = JobStatus.from_status(TankJobStatus.TEST_RUNNING)
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
-    job_got = ulta_service.execute_job(job)
+    job_got = ulta_service._execute_job(job)
     patch_loadtesting_client_claim_job_status.assert_called_with('123', *expected_status_args)
     patch_tank_client_stop_job.assert_called()
     assert job_got.status.exit_code == expected_exit_code
@@ -520,7 +520,7 @@ def test_serve_job_sustain_prepare_job_error(
 ):
     patch_tank_client_prepare_job.side_effect = TankError()
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
-    ulta_service.execute_job(job)
+    ulta_service._execute_job(job)
 
     patch_loadtesting_client_claim_job_status.assert_called_with(
         '123', AdditionalJobStatus.FAILED, 'Could not run job: ', 'internal'
@@ -578,7 +578,7 @@ def test_publish_artifacts_raise_no_error(ulta_service: UltaService, error):
     a1.service.publish_artifacts.side_effect = error
     a2.service.publish_artifacts.side_effect = error
     ulta_service.artifact_uploaders = [a1, a2]
-    ulta_service.publish_artifacts(job)
+    ulta_service._publish_artifacts(job)
     a1.service.publish_artifacts.assert_called()
     a2.service.publish_artifacts.assert_called()
 
