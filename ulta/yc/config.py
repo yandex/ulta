@@ -27,6 +27,11 @@ class YandexCloudConfigLoader(ExternalConfigLoader):
         metadata: dict = get_instance_metadata() or {}
         yandex_metadata: dict = get_instance_yandex_metadata() or {}
         attrs: dict = metadata.get('attributes', {})
+        instance_meta = metadata.get('instance', {})
+        instance_name = None
+
+        if isinstance(instance_meta, dict):
+            instance_name = instance_meta.get('name')
 
         config.backend_service_url = build_backend_url(attrs.get(METADATA_HOST_ATTR), attrs.get(METADATA_PORT_ATTR))
         config.logging_service_url = build_backend_url(
@@ -40,7 +45,7 @@ class YandexCloudConfigLoader(ExternalConfigLoader):
         config.compute_instance_id = metadata.get('id')
         config.agent_version = attrs.get(METADATA_AGENT_VERSION_ATTR)
         config.instance_lt_created = get_and_convert(attrs.get(METADATA_LT_CREATED_ATTR), bool)
-        config.agent_name = attrs.get(METADATA_AGENT_NAME_ATTR)
+        config.agent_name = attrs.get(METADATA_AGENT_NAME_ATTR, instance_name)
         config.folder_id = attrs.get(METADATA_FOLDER_ID_ATTR, yandex_metadata.get(YANDEX_METADATA_FOLDER_ID_ATTR))
 
     @classmethod
