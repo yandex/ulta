@@ -9,7 +9,7 @@ from ulta.common.collections import QueueLike
 from ulta.common.config import UltaConfig
 from ulta.common.interfaces import ClientFactory, NamedService, TransportFactory
 from ulta.common.logging import get_root_logger, get_logger, SinkHandler
-from ulta.common.module import load_class
+from ulta.common.module import load_plugin
 from ulta.service.api import state_api
 from ulta.service.artifact_uploader import S3ArtifactUploader
 from ulta.service.loadtesting_agent_service import (
@@ -228,12 +228,13 @@ def setup_plugins(config: UltaConfig, logger: logging.Logger):
     # setup transport factory
     if config.transport:
         logger.info('Using transport factory %s', config.transport)
-        TransportFactory.use(load_class(config.transport, base_class=ClientFactory))
+        transport_plugin, is_factory = load_plugin(config.transport, base_class=ClientFactory)
+        TransportFactory.use(transport_plugin if is_factory else lambda *args: transport_plugin())
 
     if config.netort_resource_manager:
         logger.info('Using netort resource manager %s', config.netort_resource_manager)
-        resource_manager = load_class(config.netort_resource_manager, base_class=ResourceManager)
-        TankClient.use_resource_manager(lambda *args: resource_manager())
+        rm_plugin, is_factory = load_plugin(config.netort_resource_manager, base_class=ResourceManager)
+        TankClient.use_resource_manager(rm_plugin if is_factory else lambda *args: rm_plugin)
     else:
         TankClient.use_resource_manager(lambda *args: make_resource_manager())
 

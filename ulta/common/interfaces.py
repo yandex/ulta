@@ -1,4 +1,4 @@
-from typing import TypeVar, Generic, Protocol, Callable, Any
+from typing import TypeVar, Generic, Protocol, Callable, Any, runtime_checkable
 from ulta.common.agent import AgentInfo
 from ulta.common.config import UltaConfig
 
@@ -83,6 +83,7 @@ class S3Client(Protocol):
     def upload(self, source_file, s3_filename, s3_bucket) -> None: ...
 
 
+@runtime_checkable
 class ClientFactory(Protocol):
     def create_agent_client(self) -> AgentClient: ...
 
