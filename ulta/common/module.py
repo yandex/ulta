@@ -1,6 +1,7 @@
 from types import ModuleType
 import inspect
 import importlib
+import typing
 
 
 def load_plugins(plugins_list: list[str]):
@@ -40,19 +41,19 @@ def load_class(module: str | ModuleType, *, base_class: type | None = None, memb
     raise PluginModuleError('Please specify types to load')
 
 
-def load_plugin(plugin: str, base_class: type) -> tuple[str, bool]:
+def get_plugin(plugin: str, base_class: type) -> typing.Callable[..., object] | type:
     try:
         pkg, member_name = plugin.rsplit('.', maxsplit=1)
     except ValueError:
         pkg, member_name = None, None
 
     try:
-        # first try to load plugin as package var then as class var
+        # first try to load plugin as an object then as a type
         plugin_obj = load_class(pkg, member_name=member_name)
         if isinstance(plugin_obj, base_class):
-            return plugin_obj, False
-        if issubclass(plugin_obj, base_class):
-            return plugin_obj, True
+            return lambda *_: plugin_obj
+        if inspect.isfunction(plugin_obj) or (inspect.isclass(plugin_obj) and issubclass(plugin_obj, base_class)):
+            return plugin_obj
     except TypeError:
         # plugin_obj is not a type
         pass
@@ -60,7 +61,7 @@ def load_plugin(plugin: str, base_class: type) -> tuple[str, bool]:
         pass
 
     plugin_obj = load_class(plugin, base_class=base_class)
-    return plugin_obj, True
+    return plugin_obj
 
 
 class PluginModuleError(RuntimeError): ...
