@@ -15,6 +15,7 @@ CONFIG_PATH_ENV = 'LOADTESTING_AGENT_CONFIG'
 RUN_IN_ENVIRONMENT_ENV = 'LOADTESTING_ENVIRONMENT'
 METADATA_AGENT_VERSION_ATTR = 'agent-version'
 CONFIG_PATHS = [
+    '/etc/ulta/config.yaml',
     '/var/lib/ulta/config.yaml',
     normalize_path('~/.ulta/config.yaml'),
     normalize_path('~/.config/ulta.yaml'),
