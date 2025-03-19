@@ -24,7 +24,7 @@ class ImbalanceDetectorPlugin(AbstractPlugin):
         self.data_queue = data_queue
 
     def post_process(self, retcode):
-        self.retcore = retcode
+        self.retcode = retcode
         try:
             autostops: list[TankAutostopPlugin] = self.core.get_plugins_of_type(TankAutostopPlugin)
         except KeyError:
