@@ -146,7 +146,7 @@ class TankClient:
         # temporary workaround to pass yc token to YCMonitoring plugin
         self._prepare_tank_variables()
 
-        resource_manager = self._resource_manager_factory() if self._resource_manager_factory else None
+        resource_manager = TankClient._resource_manager_factory() if TankClient._resource_manager_factory else None
         try:
             self._tank_worker_start_shooting_event = multiprocessing.Event()
             self.tank_worker = TankWorker(
