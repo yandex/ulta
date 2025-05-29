@@ -113,6 +113,7 @@ class _ConfigBuilder:
             config.lock_dir = content.get('lock_dir')
             config.state_api_port = get_and_convert(content.get('serve_state_api_port'), int)
             config.log_max_chunk_size = get_and_convert(content.get('log_max_chunk_size'), int)
+            config.log_max_unsent_queue_size = get_and_convert(content.get('log_max_unsent_queue_size'), int)
             config.log_retention_period = get_and_convert(content.get('log_retention_period'), str_to_timedelta)
             config.log_group_id = content.get('log_group_id')
             config.log_path = content.get('log_path', content.get('logging_path'))

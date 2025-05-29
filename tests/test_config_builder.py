@@ -104,6 +104,7 @@ EXPECTED_CONFIG = UltaConfig(
     log_level='VERYCUSTOM',
     log_path='/var/logs/superlogs',
     log_max_chunk_size=156,
+    log_max_unsent_queue_size=30000,
     log_retention_period=timedelta(minutes=23, seconds=11),
     logging_service_url='logging-ingester.ddd',
     netort_resource_manager='netortoverride',
@@ -197,6 +198,7 @@ def test_load_args_config():
             'oauth_token',
             'log_retention_period',
             'log_max_chunk_size',
+            'log_max_unsent_queue_size',
             'aws_access_key_id',
             'aws_secret_access_key',
             'custom_stdout_log_handler_factory',
@@ -256,6 +258,7 @@ def test_load_env_config():
             'reporter_interval',
             'log_retention_period',
             'log_max_chunk_size',
+            'log_max_unsent_queue_size',
             'custom_stdout_log_handler_factory',
         ],
     )

@@ -11,6 +11,7 @@ from ulta.common.interfaces import ClientFactory, RemoteLoggingClient, LogMessag
 from ulta.common.logging import SinkHandler
 from ulta.common.utils import truncate_string
 from ulta.service.service_context import LabelContext
+from ulta.service.log_uploader_service import MESSAGE_MAX_LENGTH as CLOUD_LOGGING_MESSAGE_MAX_LENGTH
 
 
 CONTEXT_LABELS_KEY = 'context_labels'
@@ -133,7 +134,7 @@ def make_log_reporter(
         return NullReporter()
 
     record_transformer = make_label_context_record_transformer(label_context)
-    handler = init_log_sink(size=20_000, label_context=label_context)
+    handler = init_log_sink(size=10_000, label_context=label_context)
     if cached_logs is not None:
         try:
             while True:
@@ -146,6 +147,7 @@ def make_log_reporter(
 
     logger.addHandler(handler)
 
+    max_unsent_size = config.log_max_unsent_queue_size or 10_000  # hundreds MiB
     max_batch_size = config.log_max_chunk_size or 1000
     return Reporter(
         handler.sink,
@@ -154,7 +156,7 @@ def make_log_reporter(
         retention_period=config.log_retention_period or timedelta(hours=3),
         max_batch_size=max_batch_size,
         report_interval=5,
-        max_unsent_size=1_000_000 // max_batch_size,
+        max_unsent_size=max_unsent_size // max_batch_size,
     )
 
 
@@ -197,6 +199,7 @@ def _make_cloud_logging_log_reporter(
         agent_id=agent.id,
         client=client,
         error_handler=error_handler,
+        max_message_length=CLOUD_LOGGING_MESSAGE_MAX_LENGTH,
     )
 
 
@@ -211,7 +214,7 @@ def _make_loadtesting_backend_log_reporter(
     client = transport_factory.create_events_log_client(agent)
 
     def error_handler(e: Exception, logger: logging.Logger):
-        logger.warning('Failed to send event logs to loadtesting: %s', e, exc_info=True)
+        logger.warning('Failed to send event logs to loadtesting: %s', e)
 
     return LogMessageProcessor(
         log_group_id='log_events',

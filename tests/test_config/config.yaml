@@ -9,6 +9,7 @@ lock_dir: '/var/locks/dirs'
 log_group_id: 'sheesh_very_unique_group'
 log_retention_period: 23m11s
 log_max_chunk_size: 156
+log_max_unsent_queue_size: 30000
 log_level: 'VERYCUSTOM'
 log_path: '/var/logs/superlogs'
 request_frequency: 16

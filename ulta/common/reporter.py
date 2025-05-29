@@ -27,7 +27,7 @@ class Reporter:
         retention_period: timedelta | None = None,
         max_batch_size: int = 1,
         report_interval: float = 5,
-        max_unsent_size: int = 100_000,
+        max_unsent_size: int = 1000,
         prepare_message: typing.Callable[[typing.Any], typing.Any] | None = None,
     ):
         self._sources = sources
@@ -108,7 +108,7 @@ class Reporter:
         result = []
         retention_timestamp = (datetime.now() - self._retention_period).timestamp()
         unsent_queue = self._unsent_messages[id(handler)]
-        while len(self._unsent_messages) > 0:
+        while len(unsent_queue) > 0:
             try:
                 msg = unsent_queue.popleft()
                 if msg.ts >= retention_timestamp:

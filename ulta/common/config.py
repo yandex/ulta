@@ -32,6 +32,7 @@ class UltaConfig(BaseModel):
     reporter_interval: StrictInt | None = None
     log_group_id: str | None = None
     log_max_chunk_size: int | None = None
+    log_max_unsent_queue_size: int | None = None
     log_retention_period: timedelta | None = None
     log_path: str | None = None
     log_level: str | None = None
