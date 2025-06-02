@@ -50,6 +50,9 @@ stage() {
 TMPDIR=$(mktemp -d)
 
 system_upgrade() {
+    # try to fix possible 'forbidden' errors with older cr.yandex/mirror/ubuntu 
+    # in apt-get install
+    rm -fr /var/lib/apt/lists/*
     DEBIAN_FRONTEND=noninteractive apt-get update -qq || log_fatal "Can't update repos"
     DEBIAN_FRONTEND=noninteractive LANG=C apt-get purge -y unattended-upgrades || log_fatal "Can't purge unattended-upgrades"
     DEBIAN_FRONTEND=noninteractive LANG=C apt-get install -y build-essential || log_fatal "Can't install build-essential"
