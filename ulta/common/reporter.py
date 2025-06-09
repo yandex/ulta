@@ -17,6 +17,8 @@ class ReporterHandlerProtocol(typing.Protocol):
 
     def error_handler(self, error: Exception, logger: logging.Logger): ...
 
+    def get_max_batch_size(self) -> int | None: ...
+
 
 class Reporter:
     def __init__(
@@ -25,7 +27,6 @@ class Reporter:
         logger: logging.Logger,
         handlers: ReporterHandlerProtocol | list[ReporterHandlerProtocol],
         retention_period: timedelta | None = None,
-        max_batch_size: int = 1,
         report_interval: float = 5,
         max_unsent_size: int = 1000,
         prepare_message: typing.Callable[[typing.Any], typing.Any] | None = None,
@@ -35,7 +36,6 @@ class Reporter:
             handlers = [handlers]
         self._handlers = handlers
         self._retention_period = retention_period or timedelta(hours=1)
-        self._max_batch_size = max_batch_size
         self._report_interval = report_interval
         # deque appends and pops are atomic and declared thread safe
         # https://docs.python.org/3/library/collections.html#deque-objects
@@ -43,6 +43,7 @@ class Reporter:
         self._lock = Lock()
         self._logger = logger
         self._prepare_message = prepare_message
+        self._max_unsent_size = max_unsent_size
 
     def add_sources(self, *sources: QueueLike):
         self._sources = self._sources + sources
@@ -76,9 +77,9 @@ class Reporter:
                 except Empty:
                     pass
 
-        to_send = [_UnsentMessage(d) for d in _chop(records, self._max_batch_size)]
         errors = []
         for handler in self._handlers:
+            to_send = [_UnsentMessage(d) for d in _chop(records, handler.get_max_batch_size() or 1)]
             handler_to_send = self._get_and_release_unsent(handler) + to_send
 
             for item in handler_to_send:
@@ -103,6 +104,10 @@ class Reporter:
             unsent_queue.append(unsent_message)
         else:
             unsent_queue.append(_UnsentMessage(unsent_message))
+        total_unsent = sum(len(u.data) if isinstance(u.data, (list, tuple)) else 1 for u in unsent_queue)
+        while len(unsent_queue) > 1 and total_unsent > self._max_unsent_size:
+            popped = unsent_queue.popleft()
+            total_unsent -= len(popped.data) if isinstance(popped.data, (list, tuple)) else 1
 
     def _get_and_release_unsent(self, handler: object) -> list["_UnsentMessage"]:
         result = []

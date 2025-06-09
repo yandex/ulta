@@ -11,7 +11,10 @@ from ulta.common.interfaces import ClientFactory, RemoteLoggingClient, LogMessag
 from ulta.common.logging import SinkHandler
 from ulta.common.utils import truncate_string
 from ulta.service.service_context import LabelContext
-from ulta.service.log_uploader_service import MESSAGE_MAX_LENGTH as CLOUD_LOGGING_MESSAGE_MAX_LENGTH
+from ulta.service.log_uploader_service import (
+    MESSAGE_MAX_LENGTH as CLOUD_LOGGING_MESSAGE_MAX_LENGTH,
+    CHUNK_MAX_SIZE as CLOUD_LOGGING_CHUNK_MAX_SIZE,
+)
 
 
 CONTEXT_LABELS_KEY = 'context_labels'
@@ -27,6 +30,7 @@ class LogMessageProcessor(ReporterHandlerProtocol):
         max_message_length: int | None = None,
         max_labels_size: int = -1,
         min_level: int = logging.NOTSET + 1,
+        max_batch_size: int | None = None,
     ):
         self._min_level = min_level
         self._agent_id = agent_id
@@ -35,6 +39,10 @@ class LogMessageProcessor(ReporterHandlerProtocol):
         self._error_handler = error_handler
         self._max_message_length = max_message_length
         self._max_labels_size = max_labels_size
+        self._max_batch_size = max_batch_size
+
+    def get_max_batch_size(self) -> int | None:
+        return self._max_batch_size
 
     def handle(self, request_id: str, messages: list[logging.LogRecord]):
         messages = [m for m in messages if m.levelno >= self._min_level]
@@ -147,16 +155,14 @@ def make_log_reporter(
 
     logger.addHandler(handler)
 
-    max_unsent_size = config.log_max_unsent_queue_size or 10_000  # hundreds MiB
-    max_batch_size = config.log_max_chunk_size or 1000
+    max_unsent_size = config.log_max_unsent_queue_size or 1000
     return Reporter(
         handler.sink,
         logger=logger,
         handlers=all_reporters,
         retention_period=config.log_retention_period or timedelta(hours=3),
-        max_batch_size=max_batch_size,
         report_interval=5,
-        max_unsent_size=max_unsent_size // max_batch_size,
+        max_unsent_size=max_unsent_size,
     )
 
 
@@ -200,6 +206,7 @@ def _make_cloud_logging_log_reporter(
         client=client,
         error_handler=error_handler,
         max_message_length=CLOUD_LOGGING_MESSAGE_MAX_LENGTH,
+        max_batch_size=CLOUD_LOGGING_CHUNK_MAX_SIZE,
     )
 
 
@@ -223,6 +230,7 @@ def _make_loadtesting_backend_log_reporter(
         error_handler=error_handler,
         max_labels_size=8192,
         max_message_length=2000,
+        max_batch_size=config.log_max_chunk_size,
     )
 
 

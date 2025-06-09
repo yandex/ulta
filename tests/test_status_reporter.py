@@ -9,7 +9,7 @@ from threading import Event
 from unittest.mock import MagicMock
 from ulta.common.cancellation import Cancellation
 from ulta.common.exceptions import CompositeException
-from ulta.common.reporter import Reporter, _chop, ReporterHandlerProtocol
+from ulta.common.reporter import Reporter, _chop, ReporterHandlerProtocol, _UnsentMessage
 from ulta.common.state import State
 from ulta.service.status_reporter import StatusReporter
 from ulta.service.tank_client import TankStatus
@@ -21,6 +21,10 @@ from google.api_core.exceptions import FailedPrecondition, NotFound, Unauthentic
 class ReporterHandler(ReporterHandlerProtocol):
     handle: typing.Callable[[str, typing.Any], None]
     error_handler: typing.Callable[[Exception, logging.Logger], None]
+    max_batch_size: int | None = None
+
+    def get_max_batch_size(self):
+        return self.max_batch_size
 
 
 @pytest.mark.parametrize(
@@ -51,8 +55,7 @@ def test_generic_reporter(data1, data2, max_batch_size, expected_result):
         q1,
         q2,
         logger=logger,
-        handlers=ReporterHandler(handle=handler, error_handler=error_handler),
-        max_batch_size=max_batch_size,
+        handlers=ReporterHandler(handle=handler, error_handler=error_handler, max_batch_size=max_batch_size),
     )
     reporter.report()
     assert processed_messages == expected_result
@@ -90,7 +93,7 @@ def test_generic_reporter_retry_unsent_data():
         raise Exception(f'error is not expected. got {error}')
 
     reporter = Reporter(
-        q1, q2, logger=logger, handlers=ReporterHandler(handle=handler, error_handler=error_handler), max_batch_size=2
+        q1, q2, logger=logger, handlers=ReporterHandler(handle=handler, error_handler=error_handler, max_batch_size=2)
     )
     reporter.report()
 
@@ -136,12 +139,11 @@ def test_generic_reporter_retention():
         logger.exception('error is not expected', exc_info=error)
         raise Exception(f'error is not expected. got {error}')
 
-    reporter_handler = ReporterHandler(handle=handler, error_handler=error_handler)
+    reporter_handler = ReporterHandler(handle=handler, error_handler=error_handler, max_batch_size=None)
     reporter = Reporter(
         q1,
         logger=logger,
         handlers=reporter_handler,
-        max_batch_size=1,
         retention_period=timedelta(milliseconds=100),
     )
 
@@ -172,6 +174,104 @@ def test_generic_reporter_retention():
 
     assert processed_messages == []
     assert len(reporter._unsent_messages[id(reporter_handler)]) == 0
+
+
+def test_generic_reporter_limits_unsent_queue():
+    q1 = Queue()
+    for d in range(30):
+        q1.put_nowait(d)
+
+    logger = logging.getLogger()
+    processed_messages = []
+    handled_errors = []
+
+    e1 = Exception(123)
+    e2 = RuntimeError('hh')
+    ticks = [e1, e1, e1, e1, e1, e2, None]
+
+    def handler(_, msg):
+        if len(ticks) > 0:
+            tick = ticks.pop(0)
+            if tick is not None:
+                raise tick
+
+        processed_messages.append(msg)
+
+    def error_handler(error, logger):
+        handled_errors.append(error)
+        if error in (e1, e2) or isinstance(error, CompositeException):
+            return
+
+        logger.exception('error is not expected', exc_info=error)
+        raise Exception(f'error is not expected. got {error}')
+
+    reporter_handler = ReporterHandler(handle=handler, error_handler=error_handler, max_batch_size=5)
+    reporter = Reporter(
+        q1,
+        logger=logger,
+        handlers=reporter_handler,
+        max_unsent_size=15,
+    )
+    reporter.report()
+
+    unsent_queue = reporter._unsent_messages[id(reporter_handler)]
+
+    assert processed_messages == []
+    assert len(unsent_queue) == 3
+    assert unsent_queue[0].data == [15, 16, 17, 18, 19]
+    assert unsent_queue[1].data == [20, 21, 22, 23, 24]
+    assert unsent_queue[2].data == [25, 26, 27, 28, 29]
+
+    reporter.report()
+
+    assert processed_messages == [[15, 16, 17, 18, 19], [20, 21, 22, 23, 24], [25, 26, 27, 28, 29]]
+    assert len(unsent_queue) == 0
+
+
+def test_generic_reporter_put_unsent():
+    reporter = Reporter(
+        Queue(),
+        logger=logging.getLogger(),
+        handlers=[],
+        max_unsent_size=15,
+    )
+    handler = object()
+    reporter._put_unsent(handler, _UnsentMessage([1, 2, 3, 4, 5]))
+    reporter._put_unsent(handler, _UnsentMessage([6, 7, 8]))
+    reporter._put_unsent(handler, _UnsentMessage([9, 10, 11]))
+    reporter._put_unsent(handler, _UnsentMessage([12, 13, 14]))
+
+    unsent_queue = reporter._unsent_messages[id(handler)]
+
+    assert len(unsent_queue) == 4
+    assert unsent_queue[0].data == [1, 2, 3, 4, 5]
+    assert unsent_queue[1].data == [6, 7, 8]
+    assert unsent_queue[2].data == [9, 10, 11]
+    assert unsent_queue[3].data == [12, 13, 14]
+
+    reporter._put_unsent(handler, _UnsentMessage([15, 16]))
+
+    assert len(unsent_queue) == 4
+    assert unsent_queue[0].data == [6, 7, 8]
+    assert unsent_queue[1].data == [9, 10, 11]
+    assert unsent_queue[2].data == [12, 13, 14]
+    assert unsent_queue[3].data == [15, 16]
+
+    reporter._put_unsent(handler, _UnsentMessage([17, 18, 19]))
+
+    assert len(unsent_queue) == 5
+    assert unsent_queue[0].data == [6, 7, 8]
+    assert unsent_queue[1].data == [9, 10, 11]
+    assert unsent_queue[2].data == [12, 13, 14]
+    assert unsent_queue[3].data == [15, 16]
+    assert unsent_queue[4].data == [17, 18, 19]
+
+    reporter._put_unsent(handler, _UnsentMessage([20, 21, 22, 23, 24, 25, 26, 27, 28]))
+
+    assert len(unsent_queue) == 3
+    assert unsent_queue[0].data == [15, 16]
+    assert unsent_queue[1].data == [17, 18, 19]
+    assert unsent_queue[2].data == [20, 21, 22, 23, 24, 25, 26, 27, 28]
 
 
 def test_generic_reporter_run():
@@ -225,8 +325,7 @@ def test_generic_reporter_run():
         q1,
         q2,
         logger=logger,
-        handlers=ReporterHandler(handle=handler, error_handler=error_handler),
-        max_batch_size=10,
+        handlers=ReporterHandler(handle=handler, error_handler=error_handler, max_batch_size=10),
         report_interval=0.1,
     )
     with reporter.run():

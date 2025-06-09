@@ -37,6 +37,7 @@ def default_config():
             agent_id_file='some_file',
             report_log_events=True,
             report_yandextank_log_events_level='DEBUG',
+            log_max_chunk_size=1000,
             **kwargs,
         )
 
