@@ -10,7 +10,7 @@ from ulta.common.reporter import NullReporter
 from ulta.service.log_reporter import (
     make_log_reporter,
     LogMessageProcessor,
-    CONTEXT_LABELS_KEY,
+    LabelsKey,
     with_extra,
 )
 from ulta.service.service_context import LabelContext
@@ -318,7 +318,7 @@ def test_loadtesting_log_reporter_prepare(msg, args, expected_message, expected_
         args=args,
         exc_info=None,
     )
-    r = with_extra(r, {CONTEXT_LABELS_KEY: {'agent_id': 'abcdf', 'some_other_value': '10500'}})
+    r = with_extra(r, {LabelsKey.CONTEXT_LABELS_KEY: {'agent_id': 'abcdf', 'some_other_value': '10500'}})
     actual_msg = log_reporter.prepare_log_record(r)
 
     expected_labels = {'agent_id': 'abcdf', 'some_other_value': '10500'} | expected_labels
@@ -327,6 +327,46 @@ def test_loadtesting_log_reporter_prepare(msg, args, expected_message, expected_
     assert actual_msg.labels == expected_labels
 
     assert _get_labels_len(actual_msg.labels) == 34 + expected_labels_len
+
+
+def test_message_log_processor_prepare_expected_labels():
+    log_reporter = LogMessageProcessor(
+        'lgg1',
+        'abcdf',
+        mock.Mock(),
+        lambda *args: None,
+        max_message_length=50,
+        max_labels_size=128,
+    )
+    r = logging.LogRecord(
+        name='logger_stdout',
+        level=logging.WARNING,
+        pathname='/some/path/name',
+        lineno=130,
+        msg='text',
+        args=None,
+        exc_info=None,
+    )
+    r = with_extra(
+        r,
+        {
+            LabelsKey.CONTEXT_LABELS_KEY: {'agent_id': 'abcdf', 'some_other_value': '10500'},
+            LabelsKey.TYPE_KEY: 'request/response',
+            LabelsKey.SOURCE_KEY: 'some_source',
+            LabelsKey.FILEPATH_KEY: '/var/lib/ulta/file.txt',
+        },
+    )
+    actual_msg = log_reporter.prepare_log_record(r)
+
+    expected_labels = {
+        'agent_id': 'abcdf',
+        'some_other_value': '10500',
+        'type': 'request/response',
+        'source': 'some_source',
+        'filepath': '/var/lib/ulta/file.txt',
+    }
+
+    assert actual_msg.labels == expected_labels
 
 
 def _get_labels_len(labels: dict[str, str]):

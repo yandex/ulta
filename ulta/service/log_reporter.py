@@ -2,6 +2,7 @@ import copy
 import logging
 import typing
 from datetime import timedelta
+from enum import StrEnum
 from queue import Full, Empty
 from ulta.common.config import UltaConfig
 from ulta.common.agent import AgentInfo
@@ -17,7 +18,11 @@ from ulta.service.log_uploader_service import (
 )
 
 
-CONTEXT_LABELS_KEY = 'context_labels'
+class LabelsKey(StrEnum):
+    CONTEXT_LABELS_KEY = 'context_labels'
+    TYPE_KEY = 'type'
+    SOURCE_KEY = 'source'
+    FILEPATH_KEY = 'filepath'
 
 
 class LogMessageProcessor(ReporterHandlerProtocol):
@@ -100,9 +105,16 @@ class LogMessageProcessor(ReporterHandlerProtocol):
     def _prepare_labels(self, item: logging.LogRecord) -> dict[str, str]:
         result: dict[str, str] = {}
         remaining_size = self._max_labels_size
-        context_labels = get_extra(item, CONTEXT_LABELS_KEY)
-        if isinstance(context_labels, typing.Mapping):
-            result, remaining_size = self._make_labels(context_labels.items(), self._max_labels_size)
+
+        for key in LabelsKey:
+            value = get_extra(item, key)
+            if isinstance(value, typing.Mapping):
+                labels, remaining_size = self._make_labels(value.items(), remaining_size)
+            elif isinstance(value, str):
+                labels, remaining_size = self._make_labels(((key, value),), remaining_size)
+            else:
+                continue
+            result.update(labels)
 
         if not isinstance(item.args, typing.Mapping):
             return result
@@ -171,7 +183,7 @@ def make_label_context_record_transformer(label_context: LabelContext | None):
         return None
 
     def transformer(r: logging.LogRecord):
-        return with_extra(r, {CONTEXT_LABELS_KEY: copy.copy(label_context.labels)})
+        return with_extra(r, {LabelsKey.CONTEXT_LABELS_KEY: copy.copy(label_context.labels)})
 
     return transformer
 
