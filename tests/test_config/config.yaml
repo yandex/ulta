@@ -25,6 +25,7 @@ environment: CUSTOM_ENV
 netort_resource_manager: 'netortoverride'
 report_log_events: yes
 report_yandextank_log_events_level: 'DEBUG'
+report_yandextank_request_response_events: no
 labels:
   l1: v1
   purpose: test

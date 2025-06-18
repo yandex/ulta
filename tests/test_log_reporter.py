@@ -369,5 +369,41 @@ def test_message_log_processor_prepare_expected_labels():
     assert actual_msg.labels == expected_labels
 
 
+@pytest.mark.parametrize(
+    'report_yandextank_request_response_events',
+    [
+        (True,),
+        (False,),
+    ],
+)
+def test_log_message_processor_report_yandextank_request_response_events(report_yandextank_request_response_events):
+    client = mock.Mock()
+    log_processor = LogMessageProcessor(
+        'lgg1',
+        'abcdf',
+        client,
+        lambda *args: None,
+        max_message_length=50,
+        max_labels_size=64,
+        report_request_response_events=report_yandextank_request_response_events,
+    )
+    r = logging.LogRecord(
+        name='logger_stdout',
+        level=logging.WARNING,
+        pathname='/some/path/name',
+        lineno=130,
+        msg='some text',
+        args=None,
+        exc_info=None,
+    )
+    r = with_extra(r, {'type': 'sample'})
+
+    log_processor.handle('request_id', [r])
+    if report_yandextank_request_response_events:
+        client.send_log.assert_called_once()
+    else:
+        client.send_log.assert_not_called()
+
+
 def _get_labels_len(labels: dict[str, str]):
     return reduce(lambda acc, p: acc + len(p[0]) + len(p[1]), labels.items(), 0)

@@ -25,6 +25,9 @@ class LabelsKey(StrEnum):
     FILEPATH_KEY = 'filepath'
 
 
+REQUEST_RESPONSE_TYPE = 'request/response'
+
+
 class LogMessageProcessor(ReporterHandlerProtocol):
     def __init__(
         self,
@@ -36,6 +39,7 @@ class LogMessageProcessor(ReporterHandlerProtocol):
         max_labels_size: int = -1,
         min_level: int = logging.NOTSET + 1,
         max_batch_size: int | None = None,
+        report_request_response_events: bool = False,
     ):
         self._min_level = min_level
         self._agent_id = agent_id
@@ -45,12 +49,16 @@ class LogMessageProcessor(ReporterHandlerProtocol):
         self._max_message_length = max_message_length
         self._max_labels_size = max_labels_size
         self._max_batch_size = max_batch_size
+        self._report_request_response_events = report_request_response_events
 
     def get_max_batch_size(self) -> int | None:
         return self._max_batch_size
 
     def handle(self, request_id: str, messages: list[logging.LogRecord]):
         messages = [m for m in messages if m.levelno >= self._min_level]
+        if not self._report_request_response_events:
+            messages = [m for m in messages if get_extra(m, LabelsKey.TYPE_KEY) != REQUEST_RESPONSE_TYPE]
+
         if not messages:
             return
 
@@ -219,6 +227,7 @@ def _make_cloud_logging_log_reporter(
         error_handler=error_handler,
         max_message_length=CLOUD_LOGGING_MESSAGE_MAX_LENGTH,
         max_batch_size=CLOUD_LOGGING_CHUNK_MAX_SIZE,
+        report_request_response_events=config.report_yandextank_request_response_events,
     )
 
 
@@ -243,6 +252,7 @@ def _make_loadtesting_backend_log_reporter(
         max_labels_size=8192,
         max_message_length=2000,
         max_batch_size=config.log_max_chunk_size,
+        report_request_response_events=config.report_yandextank_request_response_events,
     )
 
 

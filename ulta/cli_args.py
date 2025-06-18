@@ -40,6 +40,7 @@ class CliArgs:
     log_group_id: str | None = None
     no_report_log_events: bool | None = False
     report_yandextank_log_events_level: str | None = None
+    report_yandextank_request_response_events: bool | None = False
 
 
 def parse_cli_args() -> CliArgs:
@@ -89,6 +90,12 @@ def _create_parser() -> argparse.ArgumentParser:
         '--report-yandextank-log-events-level',
         dest='report_yandextank_log_events_level',
         help='Report yandextank log events of specified level to loadtesting backend service: CRITICAL, ERROR, WARNING, INFO, DEBUG, DISABLED. Default: INFO',
+    )
+    parser.add_argument(
+        '--report-yandextank-request-response-events',
+        dest='report_yandextank_request_response_events',
+        action='store_true',
+        help='Upload sampled requests/responses to Load Testing / Cloud Logging if those are supplied by load generator and log events reporting is enabled',
     )
 
     parser.add_argument(

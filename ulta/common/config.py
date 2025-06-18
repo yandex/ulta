@@ -39,6 +39,7 @@ class UltaConfig(BaseModel):
     custom_stdout_log_handler_factory: typing.Callable[[], logging.Handler] | None = Field(default=None, exclude=True)
     report_log_events: bool | None = None
     report_yandextank_log_events_level: str | None = None
+    report_yandextank_request_response_events: bool | None = None
 
     agent_name: str | None = None
     folder_id: str | None = None

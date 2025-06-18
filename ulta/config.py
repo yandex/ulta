@@ -91,6 +91,7 @@ class _ConfigBuilder:
             config.instance_lt_created = False
             config.report_log_events = True
             config.report_yandextank_log_events_level = 'INFO'
+            config.report_yandextank_request_response_events = False
 
     def load_file_config(self, config_path: str):
         config_path = normalize_path(config_path)
@@ -120,6 +121,10 @@ class _ConfigBuilder:
             config.log_level = content.get('log_level', content.get('logging_level'))
             config.report_log_events = get_and_convert(content.get('report_log_events'), as_bool)
             config.report_yandextank_log_events_level = content.get('report_yandextank_log_events_level')
+            config.report_yandextank_request_response_events = get_and_convert(
+                content.get('report_yandextank_request_response_events'),
+                as_bool,
+            )
             config.request_interval = get_and_convert(
                 content.get('request_interval', content.get('request_frequency')), int
             )
@@ -153,6 +158,10 @@ class _ConfigBuilder:
             config.log_level = os.getenv('LOADTESTING_LOG_LEVEL')
             config.report_log_events = get_and_convert(os.getenv('LOADTESTING_REPORT_LOG_EVENTS'), as_bool)
             config.report_yandextank_log_events_level = os.getenv('LOADTESTING_REPORT_YANDEXTANK_LOG_EVENTS_LEVEL')
+            config.report_yandextank_request_response_events = get_and_convert(
+                os.getenv('LOADTESTING_REPORT_YANDEXTANK_REQUEST_RESPONSE_EVENTS'),
+                as_bool,
+            )
             config.agent_name = os.getenv('LOADTESTING_AGENT_NAME')
             config.folder_id = os.getenv('LOADTESTING_FOLDER_ID')
             config.service_account_key_path = os.getenv('LOADTESTING_SA_KEY_FILE')
@@ -202,6 +211,7 @@ class _ConfigBuilder:
             config.plugins = args.plugins
             config.log_group_id = args.log_group_id
             config.report_yandextank_log_events_level = args.report_yandextank_log_events_level
+            config.report_yandextank_request_response_events = args.report_yandextank_request_response_events
 
             if args.no_cache:
                 config.no_cache = args.no_cache
