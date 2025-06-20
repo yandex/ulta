@@ -211,12 +211,13 @@ class _ConfigBuilder:
             config.plugins = args.plugins
             config.log_group_id = args.log_group_id
             config.report_yandextank_log_events_level = args.report_yandextank_log_events_level
-            config.report_yandextank_request_response_events = args.report_yandextank_request_response_events
 
             if args.no_cache:
                 config.no_cache = args.no_cache
             if args.no_report_log_events:
                 config.report_log_events = not args.no_report_log_events
+            if args.report_yandextank_request_response_events:
+                config.report_yandextank_request_response_events = args.report_yandextank_request_response_events
 
     def resolve_paths(self):
         with self.next_source('resolve_paths', modified_only=True) as config:

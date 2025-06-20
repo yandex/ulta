@@ -125,7 +125,7 @@ EXPECTED_CONFIG = UltaConfig(
     aws_secret_access_key='aws_access_key_id_secretsecret',
     report_log_events=True,
     report_yandextank_log_events_level='DEBUG',
-    report_yandextank_request_response_events=False,
+    report_yandextank_request_response_events=True,
 )
 
 
@@ -180,7 +180,7 @@ def test_load_args_config():
             object_storage_url='s3.amazon.maybe',
             no_report_log_events=False,
             report_yandextank_log_events_level='DEBUG',
-            report_yandextank_request_response_events=False,
+            report_yandextank_request_response_events=True,
         )
     )
 
@@ -229,7 +229,7 @@ def test_load_env_config():
             'LOADTESTING_LOG_LEVEL': 'VERYCUSTOM',
             'LOADTESTING_REPORT_LOG_EVENTS': 'YES',
             'LOADTESTING_REPORT_YANDEXTANK_LOG_EVENTS_LEVEL': 'DEBUG',
-            'LOADTESTING_REPORT_YANDEXTANK_REQUEST_RESPONSE_EVENTS': 'NO',
+            'LOADTESTING_REPORT_YANDEXTANK_REQUEST_RESPONSE_EVENTS': 'YES',
             'LOADTESTING_AGENT_NAME': 'ulta-agent',
             'LOADTESTING_FOLDER_ID': 'yc_folder_155',
             'LOADTESTING_SA_KEY_FILE': 'mnopq',
