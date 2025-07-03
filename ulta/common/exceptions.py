@@ -9,7 +9,12 @@ LOADTESTING_UNAVAILABLE_ERRORS = (ServiceUnavailable, GatewayTimeout, TooManyReq
 
 class CompositeException(Exception):
     def __init__(self, errors):
-        self.errors = errors
+        d = {}
+        for e in errors:
+            key = (type(e), str(e))
+            if key not in d:
+                d[key] = e
+        self.errors = list(d.values())
 
     def __str__(self) -> str:
         return 'Multiple errors occured:\n' + '\n'.join(str(e) for e in self.errors)

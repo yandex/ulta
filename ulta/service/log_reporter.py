@@ -183,6 +183,7 @@ def make_log_reporter(
         retention_period=config.log_retention_period or timedelta(hours=3),
         report_interval=5,
         max_unsent_size=max_unsent_size,
+        use_exponential_backoff=True,
     )
 
 

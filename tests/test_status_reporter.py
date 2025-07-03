@@ -3,13 +3,13 @@ import pytest
 import time
 import typing
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import timedelta, datetime
 from queue import Queue
 from threading import Event
 from unittest.mock import MagicMock
 from ulta.common.cancellation import Cancellation
 from ulta.common.exceptions import CompositeException
-from ulta.common.reporter import Reporter, _chop, ReporterHandlerProtocol, _UnsentMessage
+from ulta.common.reporter import Reporter, _chop, ReporterHandlerProtocol, _UnsentMessage, _AttemptManager
 from ulta.common.state import State
 from ulta.service.status_reporter import StatusReporter
 from ulta.service.tank_client import TankStatus
@@ -100,7 +100,7 @@ def test_generic_reporter_retry_unsent_data():
     assert processed_messages == [[0, 1], [2, 3], [13, 14]]
     assert len(handled_errors) == 1
     assert isinstance(handled_errors[0], CompositeException)
-    assert handled_errors[0].errors == [e1, e1]
+    assert handled_errors[0].errors == [e1]
 
     reporter.report()
 
@@ -113,6 +113,68 @@ def test_generic_reporter_retry_unsent_data():
 
     assert processed_messages == [[0, 1], [2, 3], [13, 14], [11, 12], [4, 10]]
     assert len(handled_errors) == 2
+
+
+def test_generic_reporter_retry_unsent_data_with_backoff():
+    q = Queue()
+    for d in range(5):
+        q.put_nowait(d)
+
+    logger = logging.getLogger()
+    processed_messages = []
+    handled_errors = []
+    do_raise = Event()
+
+    class Nop(Exception): ...
+
+    def handler(_, msg):
+        if do_raise.is_set():
+            raise Nop()
+
+        processed_messages.append(msg)
+
+    def error_handler(error, logger):
+        handled_errors.append(error)
+        if isinstance(error, (Nop, CompositeException)):
+            return
+
+        logger.exception('error is not expected', exc_info=error)
+        raise Exception(f'error is not expected. got {error}')
+
+    h = ReporterHandler(handle=handler, error_handler=error_handler, max_batch_size=2)
+    reporter = Reporter(
+        q,
+        logger=logger,
+        handlers=h,
+        use_exponential_backoff=True,
+    )
+    reporter.report()
+
+    assert processed_messages == [[0, 1], [2, 3], [4]]
+
+    do_raise.set()
+    for d in range(10, 15):
+        q.put_nowait(d)
+
+    reporter.report()
+    assert len(handled_errors) == 1
+    assert isinstance(handled_errors[0], CompositeException)
+    assert reporter._handler_managers[id(h)].can_attempt() is False
+    assert abs(reporter._handler_managers[id(h)]._next_attempt - datetime.now().timestamp() - 2) < 0.1
+
+    reporter.report()
+    assert len(handled_errors) == 1
+
+    do_raise.clear()
+    reporter.report()
+    assert len(handled_errors) == 1
+    assert processed_messages == [[0, 1], [2, 3], [4]]
+    assert reporter._handler_managers[id(h)].can_attempt() is False
+
+    time.sleep(2)
+    assert reporter._handler_managers[id(h)].can_attempt() is True
+    reporter.report()
+    assert processed_messages == [[0, 1], [2, 3], [4], [10, 11], [12, 13], [14]]
 
 
 def test_generic_reporter_retention():
@@ -217,10 +279,8 @@ def test_generic_reporter_limits_unsent_queue():
     unsent_queue = reporter._unsent_messages[id(reporter_handler)]
 
     assert processed_messages == []
-    assert len(unsent_queue) == 3
-    assert unsent_queue[0].data == [15, 16, 17, 18, 19]
-    assert unsent_queue[1].data == [20, 21, 22, 23, 24]
-    assert unsent_queue[2].data == [25, 26, 27, 28, 29]
+    assert len(unsent_queue) == 15
+    assert [d.data for d in unsent_queue] == [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
 
     reporter.report()
 
@@ -235,43 +295,32 @@ def test_generic_reporter_put_unsent():
         handlers=[],
         max_unsent_size=15,
     )
+
+    def make_unsent(data: list) -> list[_UnsentMessage]:
+        return [_UnsentMessage(d) for d in data]
+
     handler = object()
-    reporter._put_unsent(handler, _UnsentMessage([1, 2, 3, 4, 5]))
-    reporter._put_unsent(handler, _UnsentMessage([6, 7, 8]))
-    reporter._put_unsent(handler, _UnsentMessage([9, 10, 11]))
-    reporter._put_unsent(handler, _UnsentMessage([12, 13, 14]))
+    reporter._put_unsent(handler, make_unsent([1, 2, 3, 4, 5]))
+    reporter._put_unsent(handler, make_unsent([6, 7, 8]))
+    reporter._put_unsent(handler, make_unsent([9, 10, 11]))
+    reporter._put_unsent(handler, make_unsent([12, 13, 14]))
 
     unsent_queue = reporter._unsent_messages[id(handler)]
 
-    assert len(unsent_queue) == 4
-    assert unsent_queue[0].data == [1, 2, 3, 4, 5]
-    assert unsent_queue[1].data == [6, 7, 8]
-    assert unsent_queue[2].data == [9, 10, 11]
-    assert unsent_queue[3].data == [12, 13, 14]
+    assert len(unsent_queue) == 14
+    assert [d.data for d in unsent_queue] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
-    reporter._put_unsent(handler, _UnsentMessage([15, 16]))
+    reporter._put_unsent(handler, make_unsent([15, 16]))
+    assert len(unsent_queue) == 15
+    assert [d.data for d in unsent_queue] == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 
-    assert len(unsent_queue) == 4
-    assert unsent_queue[0].data == [6, 7, 8]
-    assert unsent_queue[1].data == [9, 10, 11]
-    assert unsent_queue[2].data == [12, 13, 14]
-    assert unsent_queue[3].data == [15, 16]
+    reporter._put_unsent(handler, make_unsent([17, 18, 19]))
+    assert len(unsent_queue) == 15
+    assert [d.data for d in unsent_queue] == [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
 
-    reporter._put_unsent(handler, _UnsentMessage([17, 18, 19]))
-
-    assert len(unsent_queue) == 5
-    assert unsent_queue[0].data == [6, 7, 8]
-    assert unsent_queue[1].data == [9, 10, 11]
-    assert unsent_queue[2].data == [12, 13, 14]
-    assert unsent_queue[3].data == [15, 16]
-    assert unsent_queue[4].data == [17, 18, 19]
-
-    reporter._put_unsent(handler, _UnsentMessage([20, 21, 22, 23, 24, 25, 26, 27, 28]))
-
-    assert len(unsent_queue) == 3
-    assert unsent_queue[0].data == [15, 16]
-    assert unsent_queue[1].data == [17, 18, 19]
-    assert unsent_queue[2].data == [20, 21, 22, 23, 24, 25, 26, 27, 28]
+    reporter._put_unsent(handler, make_unsent([20, 21, 22, 23, 24, 25, 26, 27, 28]))
+    assert len(unsent_queue) == 15
+    assert [d.data for d in unsent_queue] == [14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
 
 
 def test_generic_reporter_run():
@@ -335,7 +384,7 @@ def test_generic_reporter_run():
             q1.put_nowait(d)
 
     # extra [3] because it issued the exception and must be retried
-    assert processed_messages == [[1, 15], [2, 18], [3], [3], [0, 0, 109]]
+    assert processed_messages == [[1, 15], [2, 18], [3], [3, 0, 0, 109]]
 
 
 @pytest.mark.parametrize(
@@ -419,3 +468,33 @@ def test_report_error_status(tank_status_arg, status_message_arg, expected_statu
         expected_status,
         expected_message,
     )
+
+
+def test_attempt_manager():
+    manager = _AttemptManager()
+    assert manager.can_attempt() is True
+    assert 0 == manager._next_attempt
+
+    manager.record(False)
+    assert manager.can_attempt() is True
+    assert 0 == manager._next_attempt
+
+    manager.record(True)
+    assert manager.can_attempt() is False
+    assert abs(manager._next_attempt - datetime.now().timestamp() - 2) <= 0.1
+
+    manager.record(True)
+    assert manager.can_attempt() is False
+    assert abs(manager._next_attempt - datetime.now().timestamp() - 4) <= 0.1
+
+    manager.record(True)
+    assert manager.can_attempt() is False
+    assert abs(manager._next_attempt - datetime.now().timestamp() - 8) <= 0.1
+
+    manager.record(False)
+    assert manager.can_attempt() is True
+    assert 0 == manager._next_attempt
+
+    manager.record(True)
+    assert manager.can_attempt() is False
+    assert abs(manager._next_attempt - datetime.now().timestamp() - 2) <= 0.1

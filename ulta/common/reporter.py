@@ -29,7 +29,7 @@ class Reporter:
         retention_period: timedelta | None = None,
         report_interval: float = 5,
         max_unsent_size: int = 1000,
-        prepare_message: typing.Callable[[typing.Any], typing.Any] | None = None,
+        use_exponential_backoff: bool = False,
     ):
         self._sources = sources
         if not isinstance(handlers, list):
@@ -42,8 +42,11 @@ class Reporter:
         self._unsent_messages: dict[int, deque[_UnsentMessage]] = defaultdict(lambda: deque(maxlen=max_unsent_size))
         self._lock = Lock()
         self._logger = logger
-        self._prepare_message = prepare_message
         self._max_unsent_size = max_unsent_size
+        if use_exponential_backoff:
+            self._handler_managers: dict[int, _AttemptManager] = defaultdict(_AttemptManager)
+        else:
+            self._handler_managers: dict[int, _AttemptManager] = defaultdict(_DummyAttemptManager)
 
     def add_sources(self, *sources: QueueLike):
         self._sources = self._sources + sources
@@ -55,41 +58,32 @@ class Reporter:
                 yield stop
         finally:
             try:
-                self.report()
+                self.report(force=True)
             except BaseException:
                 self._logger.exception('Failed to report STOPPED status')
 
-    def report(self):
-        with self._lock:
-            records = []
-            for source in self._sources:
-                try:
-                    while not source.empty():
-                        item = source.get_nowait()
-
-                        try:
-                            if self._prepare_message is not None:
-                                item = self._prepare_message(item)
-                        except Exception as e:
-                            self._logger.warning('Failed to prepare log message: %s', e)
-                        else:
-                            records.append(item)
-                except Empty:
-                    pass
-
-        errors = []
+    def report(self, force: bool = False):
+        records = self._collect_new_messages()
         for handler in self._handlers:
-            to_send = [_UnsentMessage(d) for d in _chop(records, handler.get_max_batch_size() or 1)]
-            handler_to_send = self._get_and_release_unsent(handler) + to_send
+            attempt_manager = self._handler_managers[id(handler)]
+            if not force and not attempt_manager.can_attempt():
+                self._put_unsent(handler, records)
+                continue
 
-            for item in handler_to_send:
-                if not item:
+            errors = []
+            all_handler_messages = sorted(self._get_and_release_unsent(handler) + records, key=lambda r: r.ts)
+            to_send: list[list[_UnsentMessage]] = _chop(all_handler_messages, handler.get_max_batch_size() or 1)
+
+            for unsent_chunk in to_send:
+                if not unsent_chunk:
                     continue
                 try:
-                    handler.handle(item.id, item.data)
+                    handler.handle(str(uuid.uuid4()), [d.data for d in unsent_chunk])
                 except Exception as e:
-                    self._put_unsent(handler, item)
+                    self._put_unsent(handler, unsent_chunk)
                     errors.append(e)
+
+            attempt_manager.record(len(errors) == len(to_send))
             if len(errors) > 1:
                 handler.error_handler(CompositeException(errors), self._logger)
             elif len(errors) == 1:
@@ -98,29 +92,25 @@ class Reporter:
     def _error_handler(self, error: Exception):
         return self._logger.error('Unhandled error occured in Reporter thread', exc_info=error)
 
-    def _put_unsent(self, handler: object, unsent_message: typing.Any):
-        unsent_queue = self._unsent_messages[id(handler)]
-        if isinstance(unsent_message, _UnsentMessage):
-            unsent_queue.append(unsent_message)
-        else:
-            unsent_queue.append(_UnsentMessage(unsent_message))
-        total_unsent = sum(len(u.data) if isinstance(u.data, (list, tuple)) else 1 for u in unsent_queue)
-        while len(unsent_queue) > 1 and total_unsent > self._max_unsent_size:
-            popped = unsent_queue.popleft()
-            total_unsent -= len(popped.data) if isinstance(popped.data, (list, tuple)) else 1
+    def _collect_new_messages(self) -> list['_UnsentMessage']:
+        records = []
+        with self._lock:
+            for source in self._sources:
+                try:
+                    while not source.empty():
+                        records.append(_UnsentMessage(source.get_nowait()))
+                except Empty:
+                    pass
+        return records
 
-    def _get_and_release_unsent(self, handler: object) -> list["_UnsentMessage"]:
-        result = []
+    def _put_unsent(self, handler: object, unsent_chunk: list['_UnsentMessage']):
+        self._unsent_messages[id(handler)].extend(unsent_chunk)
+
+    def _get_and_release_unsent(self, handler: object) -> list['_UnsentMessage']:
         retention_timestamp = (datetime.now() - self._retention_period).timestamp()
-        unsent_queue = self._unsent_messages[id(handler)]
-        while len(unsent_queue) > 0:
-            try:
-                msg = unsent_queue.popleft()
-                if msg.ts >= retention_timestamp:
-                    result.append(msg)
-            except IndexError:
-                break
-        return result
+        items = [m for m in self._unsent_messages[id(handler)] if m.ts >= retention_timestamp]
+        self._unsent_messages[id(handler)].clear()
+        return items
 
 
 def _chop(data: list, size: int) -> list[list]:
@@ -135,7 +125,6 @@ def _chop(data: list, size: int) -> list[list]:
 
 class _UnsentMessage:
     def __init__(self, data) -> None:
-        self.id = str(uuid.uuid4())
         self.ts = now().timestamp()
         self.data = data
 
@@ -147,3 +136,38 @@ class NullReporter:
     @contextmanager
     def run(self):
         yield
+
+
+class _DummyAttemptManager:
+    def can_attempt(self):
+        return True
+
+    def record(self, failure: bool):
+        pass
+
+
+class _AttemptManager:
+    def __init__(
+        self,
+        multiplier=2,
+        max_delay=600,
+        base_delay=2,
+    ):
+        self._next_attempt: float = 0
+        self._multiplier = multiplier
+        self._max_delay = max_delay
+        self._base_delay = base_delay
+        self._current_delay = base_delay
+
+    def can_attempt(self):
+        return self._next_attempt <= datetime.now().timestamp()
+
+    def record(self, failure: bool):
+        if not failure:
+            self._next_attempt = 0
+            self._current_delay = self._base_delay
+            return
+
+        delay = min(self._current_delay, self._max_delay)
+        self._next_attempt = datetime.now().timestamp() + delay
+        self._current_delay = min(self._current_delay * self._multiplier, self._max_delay)
