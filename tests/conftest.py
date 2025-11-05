@@ -208,7 +208,7 @@ def check_threads_leak():
         if not extra_frames:
             return
         # logging just for case test ends by ya make timeout
-        logging.warn(f'Test generate {len(extra_frames)} extra threads. Waiting...')
+        logging.warning(f'Test generate {len(extra_frames)} extra threads. Waiting...')
         logging.info('Extra thread trace: ')
         logging.info(''.join(traceback.format_stack(extra_frames[0], limit=50)))
         raise AssertionError(f'Test generate extra {len(extra_frames)} threads.')
