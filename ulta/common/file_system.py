@@ -221,7 +221,7 @@ class FilesystemCleanup:
             free_space = self._log_free_space('after', path)
             return free_space
         except Exception as e:
-            self._logger.error('error during cleanup %(title)s: {ex}', {'title': title, 'ex': str(e)})
+            self._logger.error('error during cleanup %(title)s: %(ex)s', {'title': title, 'ex': str(e)})
         return -1
 
     def clean_temporary_dir(self, disk_limit: int = -1) -> int:

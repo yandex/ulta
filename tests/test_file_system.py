@@ -376,7 +376,7 @@ def test_filesystem_cleanup(work_dir, lock_dir, netort_dir):
                 patch.object(Path, 'unlink', new=lambda p: unlinked_files.add(p)),
                 patch.object(Path, 'rglob', new=lambda p, pattern: [f for f in FILES if f.is_relative_to(p)]),
                 patch.object(Path, 'iterdir', new=lambda p: [f for f in FILES if f.parent == p]),
-                patch.object(Path, 'stat', new=lambda p: FILES[p]),
+                patch.object(Path, 'stat', new=lambda p, follow_symlinks=False: FILES[p]),
                 patch.object(Path, 'exists', new=lambda p: p in FILES),
             ):
                 FilesystemCleanup(logging.getLogger(), fs, job, rm).cleanup()
