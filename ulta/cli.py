@@ -24,3 +24,7 @@ def main():
         logger.exception('Ulta execution failure')
         exit_code = 1
     sys.exit(exit_code)
+
+
+if __name__ == '__main__':
+    main()

@@ -90,7 +90,7 @@ class Reporter:
                 handler.error_handler(errors[0], self._logger)
 
     def _error_handler(self, error: Exception):
-        return self._logger.error('Unhandled error occured in Reporter thread', exc_info=error)
+        return self._logger.error('Unhandled error occurred in Reporter thread', exc_info=error)
 
     def _collect_new_messages(self) -> list['_UnsentMessage']:
         records = []

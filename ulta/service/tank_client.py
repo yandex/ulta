@@ -20,9 +20,10 @@ from ulta.common.file_system import FS, FilesystemCleanup, ensure_dir
 from ulta.common.job import Job, JobPluginType
 from ulta.common.job_status import AdditionalJobStatus, JobStatus
 from ulta.common.interfaces import JobDataUploaderClient
-from ulta.service.data_uploader import TrailUploader, MonitoringUploader, DataPipePlugin
+from ulta.common.reporter import Reporter
+from ulta.service.data_uploader import DataPipePlugin, TrailReportHandler, MonitoringReportHandler, DataUploaderThread
 from ulta.service.imbalance_detector import ImbalanceUploader, ImbalanceDetectorPlugin
-from ulta.service.interfaces import JobBackgroundWorker, JobFinalizer
+from ulta.service.interfaces import JobFinalizer
 
 
 INTERNAL_ERROR_TYPE = 'internal'
@@ -32,6 +33,10 @@ AUTOSTOP_EXIT_CODES = [
     if attr.startswith('RC')
 ]
 TANK_WORKER_TIMEOUT = 60
+
+DEFAULT_MAX_TRAIL_BATCH_SIZE = 200
+DEFAULT_MAX_MONITORING_BATCH_SIZE = 200
+DEFAULT_DATA_UPLOAD_TIMEOUT = 300
 
 
 class TankStatus(IntEnum):
@@ -74,6 +79,9 @@ class TankClient:
         tank_worker_timeout: int = TANK_WORKER_TIMEOUT,
         variables: TankVariables | None = None,
         additional_tank_log_handlers: list[logging.Handler] | None = None,
+        max_trail_batch_size: int = DEFAULT_MAX_TRAIL_BATCH_SIZE,
+        max_monitoring_batch_size: int = DEFAULT_MAX_MONITORING_BATCH_SIZE,
+        data_upload_timeout: float = DEFAULT_DATA_UPLOAD_TIMEOUT,
     ):
         self.logger = logger
         self.fs = fs
@@ -82,11 +90,14 @@ class TankClient:
         self.loadtesting_client = loadtesting_client
         self.data_uploader_api_address = data_uploader_api_address
         self._tank_worker_start_shooting_event = None
-        self._background_workers: list[JobBackgroundWorker] = []
+        self._data_uploader: DataUploaderThread | None = None
         self._finalizers: list[JobFinalizer] = []
         self._tank_worker_timeout = tank_worker_timeout
         self._variables = variables
         self._additional_tank_log_handlers = additional_tank_log_handlers or []
+        self._max_trail_batch_size = max_trail_batch_size
+        self._max_monitoring_batch_size = max_monitoring_batch_size
+        self._data_upload_timeout = data_upload_timeout
 
     def _generate_job_config_patches(self, job: Job) -> list:
         patch = {
@@ -176,8 +187,31 @@ class TankClient:
         self.tank_worker.core.register_external_plugin(
             'ulta_data_pipe', lambda core: DataPipePlugin(core, trail_pipe, mon_pipe)
         )
-        self._add_background_worker(TrailUploader(job.id, trail_pipe, self.loadtesting_client, self.logger))
-        self._add_background_worker(MonitoringUploader(job.id, mon_pipe, self.loadtesting_client, self.logger))
+
+        def error_handler(e: Exception, logger: logging.Logger):
+            logger.warning('Failed to send data: %s', e)
+
+        trail_handler = TrailReportHandler(
+            self.logger, self.loadtesting_client, job.id, error_handler, self._max_trail_batch_size
+        )
+        mon_handler = MonitoringReportHandler(
+            self.logger, self.loadtesting_client, job.id, error_handler, self._max_monitoring_batch_size
+        )
+        self._data_uploader = DataUploaderThread(
+            self.logger,
+            Reporter(
+                trail_pipe,
+                handlers=[trail_handler],
+                logger=self.logger,
+                report_interval=1,
+                use_exponential_backoff=True,
+            ),
+            Reporter(
+                mon_pipe, logger=self.logger, handlers=[mon_handler], report_interval=1, use_exponential_backoff=True
+            ),
+            [trail_handler, mon_handler],
+            self.tank_worker.core.config.get_option('core', 'data_upload_timeout', self._data_upload_timeout),
+        )
         if job.plugin_enabled(JobPluginType.AUTOSTOP):
             autostop_pipe = multiprocessing.Queue()
             self.tank_worker.core.register_external_plugin(
@@ -185,15 +219,10 @@ class TankClient:
             )
             self._add_finalizer(ImbalanceUploader(self.logger, job.id, autostop_pipe, self.loadtesting_client))
 
-    def _add_background_worker(self, worker):
-        self._background_workers.append(worker)
-
     def _add_finalizer(self, worker):
         self._finalizers.append(worker)
 
     def cleanup(self):
-        [u.stop() for u in self._background_workers]
-        self._background_workers = []
         self._finalizers = []
         if self.tank_worker is not None:
             if self.tank_worker.is_alive():
@@ -205,10 +234,14 @@ class TankClient:
         self.tank_worker = None
         self._tank_worker_start_shooting_event = None
 
+        if self._data_uploader is not None:
+            self._data_uploader.stop()
+        self._data_uploader = None
+
     def finish(self):
         self.stop_job()
-        for worker in self._background_workers:
-            worker.finish()
+        if self._data_uploader is not None:
+            self._data_uploader.stop()
         for post_action in self._finalizers:
             post_action.run()
         self.cleanup()
@@ -217,8 +250,8 @@ class TankClient:
         if self._tank_worker_start_shooting_event is None:
             raise TankError('Trying to run job before prepare stage.')
         if not self._tank_worker_start_shooting_event.is_set():
+            self._data_uploader.start()
             self._tank_worker_start_shooting_event.set()
-            [u.start() for u in self._background_workers]
 
     def stop_job(self):
         if self.tank_worker is not None and self.tank_worker.is_alive():

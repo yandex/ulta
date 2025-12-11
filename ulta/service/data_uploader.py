@@ -1,12 +1,11 @@
 import logging
 import threading
-import time
 from multiprocessing import Queue
-from queue import Empty
+import time
+import typing
 
 from ulta.common.interfaces import JobDataUploaderClient
-from ulta.service.interfaces import JobBackgroundWorker
-from ulta.common.exceptions import LOADTESTING_UNAVAILABLE_ERRORS
+from ulta.common.reporter import Reporter, ReporterHandlerProtocol
 from yandextank.common.interfaces import AggregateResultListener, MonitoringDataListener, AbstractPlugin
 from yandextank.core import TankCore
 from yandextank.plugins.DataUploader.plugin import chop
@@ -42,156 +41,150 @@ class DataPipePlugin(AbstractPlugin, AggregateResultListener, MonitoringDataList
             self.data_queue.put((data, stats))
 
 
-class DataUploader(JobBackgroundWorker):
-    name: str = 'Abstract Data Uploader'
-
-    class _Interrupt(Exception):
-        pass
-
-    def __init__(self, job_id: str, data_queue: Queue, logger: logging.Logger):
-        self.job_id = job_id
-        self.data_queue = data_queue
-        self.finished = threading.Event()
-        self.interrupted = threading.Event()
-        self.thread = threading.Thread(target=self._uploader)
-        self.thread.daemon = True
-        self.logger = logger
-        self.api_attempts = 10
-        self.api_timeout = 5
-        self.trace = False
-
-    def start(self):
-        if self.finished.is_set():
-            raise RuntimeError(f"Worker {self.name} can't be started after finish was called.")
-        self.thread.start()
-
-    def stop(self):
-        self.interrupted.set()
-
-    def finish(self):
-        if self.finished.is_set():
-            return
-        # give an attempt to finish gracefully: finishing uploading all the stuff
-        if self.thread.is_alive():
-            self.thread.join(self.api_attempts * self.api_timeout)
-
-        # final attempt to finish
-        if self.thread.is_alive():
-            self.stop()
-            self.thread.join(self.api_timeout)
-            self._purge_data_queue()
-        self.finished.set()
-
-    def api_timeouts(self):
-        return (self.api_timeout for _ in range(self.api_attempts - 1))
-
-    def _uploader(self):
-        self.logger.info('%(worker_name)s thread started', dict(worker_name=self.name))
-        try:
-            while not self.interrupted.is_set():
-                try:
-                    entry = self.data_queue.get(timeout=1)
-                    if entry is None:
-                        self.logger.info(
-                            '%(worker_name)s queue returned None. No more messages expected.',
-                            dict(worker_name=self.name),
-                        )
-                        break
-                    self._send_with_retry(entry)
-                except Empty:
-                    continue
-                except DataUploader._Interrupt:
-                    self.logger.error(
-                        '%(worker_name)s uploader failed to connect to backend. Terminating...',
-                        dict(worker_name=self.name),
-                    )
-                    self.interrupted.set()
-                except Exception as e:
-                    self.logger.exception(
-                        'Unhandled exception occured. Skipping data chunk...', dict(error=str(e), worker_name=self.name)
-                    )
-
-            if self.interrupted.is_set():
-                self.logger.warning('%(worker_name)s received interrupt signal', dict(worker_name=self.name))
-
-            self._purge_data_queue()
-        finally:
-            self.logger.info('Closing %(worker_name)s thread', dict(worker_name=self.name))
-            self.finished.set()
-
-    def _purge_data_queue(self):
-        try:
-            while self.data_queue is not None and not self.data_queue.empty():
-                if self.data_queue.get_nowait() is None:
-                    break
-        except Empty:
-            pass
-
-    def _send_with_retry(self, data):
-        data = self.prepare_data(data)
-        api_timeouts = self.api_timeouts()
-        while not self.interrupted.is_set():
-            try:
-                if self.trace:
-                    self.logger.debug('Sending %s', data)
-                code = self.send_data(data)
-                if code == 0:
-                    break
-            except LOADTESTING_UNAVAILABLE_ERRORS:
-                if not self.interrupted.is_set():
-                    try:
-                        timeout = next(api_timeouts)
-                    except StopIteration:
-                        raise DataUploader._Interrupt()
-                    self.logger.info(
-                        'GRPC error, will retry in %(next_attempt)ss...',
-                        dict(next_attempt=timeout, worker_name=self.name),
-                    )
-                    time.sleep(timeout)
-                    continue
-                else:
-                    break
-
-    def send_data(self, data):
-        raise NotImplementedError()
-
-    def prepare_data(self, data):
-        return data
-
-
-class TrailUploader(DataUploader):
+class TrailReportHandler(ReporterHandlerProtocol):
     name: str = 'Trail Uploader'
 
     def __init__(
-        self, job_id: str, data_queue: Queue, loadtesting_client: JobDataUploaderClient, logger: logging.Logger
+        self,
+        logger: logging.Logger,
+        loadtesting_client: JobDataUploaderClient,
+        job_id: str,
+        error_handler: typing.Callable[[Exception, logging.Logger], None],
+        max_batch_size: int | None = None,
     ):
-        DataUploader.__init__(self, job_id, data_queue, logger)
-        self.loadtesting_client = loadtesting_client
+        self._logger = logger
+        self._lt_client = loadtesting_client
+        self._job_id = job_id
+        self._error_handler = error_handler
+        self._max_batch_size = max_batch_size
+        self.finished = threading.Event()
 
-    def prepare_data(self, data):
-        data_item, stat_item = data
-        return self.loadtesting_client.prepare_test_data(data_item, stat_item)
+    def get_max_batch_size(self) -> int | None:
+        return self._max_batch_size
 
-    def send_data(self, data):
-        if not self.interrupted.is_set():
-            return self.loadtesting_client.send_trails(self.job_id, data)
-        return 0
+    def handle(self, request_id: str, messages: list[tuple]):
+        data = []
+        for msg in messages:
+            if msg is None:
+                self.finished.set()
+            else:
+                data.extend(self._lt_client.prepare_test_data(msg[0], msg[1]))
+        if data:
+            self._lt_client.send_trails(self._job_id, data)
+
+    def error_handler(self, error: Exception, logger: logging.Logger):
+        if self._error_handler is not None:
+            self._error_handler(error, logger)
 
 
-class MonitoringUploader(DataUploader):
+class MonitoringReportHandler(ReporterHandlerProtocol):
     name: str = 'Monitoring Uploader'
     chunk_size: int = 10
 
     def __init__(
-        self, job_id: str, data_queue: Queue, loadtesting_client: JobDataUploaderClient, logger: logging.Logger
+        self,
+        logger: logging.Logger,
+        loadtesting_client: JobDataUploaderClient,
+        job_id: str,
+        error_handler: typing.Callable[[Exception, logging.Logger], None],
+        max_batch_size: int | None = None,
     ):
-        DataUploader.__init__(self, job_id, data_queue, logger)
-        self.loadtesting_client = loadtesting_client
+        self._logger = logger
+        self._lt_client = loadtesting_client
+        self._job_id = job_id
+        self._error_handler = error_handler
+        self._max_batch_size = max_batch_size
+        self.finished = threading.Event()
 
-    def send_data(self, data):
-        if not self.interrupted.is_set():
-            return self.loadtesting_client.send_monitorings(self.job_id, data)
-        return 0
+    def get_max_batch_size(self) -> int | None:
+        return self._max_batch_size
 
-    def prepare_data(self, data_item):
-        return self.loadtesting_client.prepare_monitoring_data(data_item)
+    def handle(self, request_id: str, messages: list):
+        data = []
+        for msg in messages:
+            if msg is None:
+                self.finished.set()
+            else:
+                data.extend(self._lt_client.prepare_monitoring_data(msg))
+        if data:
+            self._lt_client.send_monitorings(self._job_id, data)
+
+    def error_handler(self, error: Exception, logger: logging.Logger):
+        if self._error_handler is not None:
+            self._error_handler(error, logger)
+
+
+class DataUploaderThread:
+    def __init__(
+        self,
+        logger: logging.Logger,
+        trail_reporter: Reporter,
+        monitoring_reporter: Reporter,
+        handlers: list[TrailReportHandler | MonitoringReportHandler],
+        shutdown_timeout: float,
+    ):
+        self._logger = logger
+        self._trail_reporter = trail_reporter
+        self._mon_reporter = monitoring_reporter
+        self._handlers = handlers
+        self._shutdown_timeout = shutdown_timeout
+        self._evt_is_started = threading.Event()
+        self._evt_need_stop = threading.Event()
+        self._thr: threading.Thread | None = None
+
+    def _run(self):
+        try:
+            self._logger.debug('DataUploaderThread: starting trail and monitoring uploaders')
+            with (
+                self._mon_reporter.run() as mon_stop,
+                self._trail_reporter.run() as trail_stop,
+            ):
+                self._evt_is_started.set()
+                self._logger.debug('DataUploaderThread: uploaders started')
+
+                self._evt_need_stop.wait()
+                self._logger.debug('DataUploaderThread: got stop event.')
+
+                self._wait_for_data_sent()
+
+                trail_stop.set()
+                mon_stop.set()
+            self._logger.debug('DataUploaderThread: done')
+        except Exception:
+            self._logger.exception('DataUploaderThread: unexpected exception')
+
+    def _wait_for_data_sent(self):
+        start_time = time.time()
+        while time.time() - start_time < self._shutdown_timeout:
+            for h in self._handlers:
+                if not h.finished.is_set():
+                    h.finished.wait(1)
+                    break
+            else:
+                break
+        elapsed_time = time.time() - start_time
+        if elapsed_time >= self._shutdown_timeout:
+            self._logger.warning(
+                f'DataUploaderThread: wait for send data takes {elapsed_time} seconds (timeout is {self._shutdown_timeout}).'
+            )
+        elif elapsed_time > 1:
+            self._logger.info(
+                f'DataUploaderThread: wait for send data takes {elapsed_time} seconds (timeout is {self._shutdown_timeout}).'
+            )
+
+    def start(self):
+        if self._thr is not None or self._evt_need_stop.is_set():
+            raise RuntimeError('Ulta data uploaders already started')
+        self._thr = threading.Thread(target=self._run, name='DataUploaderThread')
+        self._thr.start()
+        while not self._evt_is_started.is_set():
+            self._evt_is_started.wait(10)
+            if not self._thr.is_alive():
+                raise RuntimeError('Error at start ulta data uploaders')
+
+    def stop(self):
+        self._evt_need_stop.set()
+        if self._thr is None:
+            return
+        while self._thr.is_alive():
+            self._thr.join(1)

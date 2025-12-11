@@ -48,12 +48,11 @@ def test_parse_job_status(
 
 def test_finish_awaits_running_jobs(fs_mock: FS):
     client = TankClient(logging.getLogger(), fs_mock, MagicMock(), 'api_address')
-    w1, w2, f1, f2 = MagicMock(), MagicMock(), MagicMock(), MagicMock()
-    client._background_workers = [w1, w2]
+    du, f1, f2 = MagicMock(), MagicMock(), MagicMock()
     client._finalizers = [f1, f2]
+    client._data_uploader = du
     client.finish()
-    w1.finish.assert_called()
-    w2.finish.assert_called()
+    du.stop.assert_called()
     f1.run.assert_called()
     f2.run.assert_called()
 
