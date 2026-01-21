@@ -86,6 +86,7 @@ RETRAYABLE_LT_CLIENT_CODES = {
     grpc.StatusCode.PERMISSION_DENIED,
     grpc.StatusCode.UNAVAILABLE,
     grpc.StatusCode.UNAUTHENTICATED,
+    grpc.StatusCode.ABORTED,
 }
 
 
