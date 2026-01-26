@@ -37,9 +37,9 @@ def test_state_service_api_handlers_with_state(free_port):
     port = free_port
     uri = f'http://127.0.0.1:{port}'
     with state_api(s, cancellation, port, logger):
-        with GenericObserver(s, logger, cancellation).observe(stage='testing 123', critical=False):
+        with GenericObserver(s, logger, cancellation).observe(stage='testing 123', error=Exception):
             try:
-                with GenericObserver(s, logger, cancellation).observe(stage='sub_stage', critical=False):
+                with GenericObserver(s, logger, cancellation).observe(stage='sub_stage', error=Exception):
                     raise Exception('something went wrong')
             except Exception:
                 pass
@@ -60,8 +60,8 @@ def test_state_service_api_shutdown(free_port):
     port = free_port
     uri = f'http://127.0.0.1:{port}'
     with state_api(s, cancellation, port, logger):
-        with GenericObserver(s, logger, cancellation).observe(stage='testing 123', critical=False):
-            with GenericObserver(s, logger, cancellation).observe(stage='sub_stage', critical=False):
+        with GenericObserver(s, logger, cancellation).observe(stage='testing 123'):
+            with GenericObserver(s, logger, cancellation).observe(stage='sub_stage'):
                 _ = requests.post(f'{uri}/shutdown')
                 health_response = requests.get(f'{uri}/health')
 

@@ -144,20 +144,18 @@ def test_cancellation(
     check_threads_leak,
     ulta_service: UltaService,
 ):
-    cancellation = Cancellation()
     scenario = iter([NotFound('')] * 6)
 
     def test_scenario(*args):
         try:
             raise next(scenario)
         except StopIteration:
-            cancellation.notify('stop')
+            ulta_service.cancellation.notify('stop')
 
     patch_tank_client_get_tank_status.return_value = TankStatus.READY_FOR_TEST
     patch_loadtesting_client_get_job.side_effect = test_scenario
-    ulta_service.cancellation = cancellation
     ulta_service.serve()
-    assert cancellation.is_set()
+    assert ulta_service.cancellation.is_set()
 
 
 @pytest.mark.parametrize(
@@ -325,7 +323,7 @@ def test_wait_for_a_job_error(check_threads_leak, ulta_service: UltaService):
     with patch.object(YCLoadtestingClient, 'get_job', side_effect=FailedPrecondition('')):
         with pytest.raises(FailedPrecondition):
             _ = ulta_service.wait_for_a_job()
-        assert ulta_service._observer._state.ok is False
+        assert ulta_service._observer._state.ok is True
 
 
 @pytest.mark.usefixtures(

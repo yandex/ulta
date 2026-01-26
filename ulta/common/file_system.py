@@ -303,13 +303,13 @@ class FileSystemObserver(HealthCheckProtocol):
 
     def healthcheck(self):
         for req in self._requirements:
-            with self._observer.observe(stage=f'check working dir {req.path}', critical=True):
+            with self._observer.observe(stage=f'check working dir {req.path}', suppress=Exception, error=Exception):
                 ensure_dir(req.path)
 
         fs_usage = self._fs_utils.get_batch([req.path for req in self._requirements])
         for req in self._requirements:
             with self._observer.observe(
-                stage=f'check free space {req.path}', critical=False, exceptions=NotEnoughFreeSpace
+                stage=f'check free space {req.path}', suppress=Exception, error=NotEnoughFreeSpace
             ):
                 self._check_free_space(req, fs_usage.get(req.path))
 

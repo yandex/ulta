@@ -22,14 +22,14 @@ def register_loadtesting_agent(
 ):
     agent = make_agent_info_from_config(config)
     if agent.is_persistent_external_agent() and not config.no_cache and config.agent_id_file:
-        with observer.observe(stage='load cached agent id from file', critical=False):
+        with observer.observe(stage='load cached agent id from file', suppress=Exception):
             agent.id = try_read_agent_id(config.agent_id_file, logger)
 
-    with observer.observe(stage='register agent in service', critical=True, suppress=False):
+    with observer.observe(stage='register agent in service', critical=Exception):
         agent.id = agent.id or _identify_agent_id(agent, agent_client, logger)
 
     if not config.no_cache and config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
-        with observer.observe(stage='cache agent id to file', critical=False):
+        with observer.observe(stage='cache agent id to file', suppress=Exception):
             try_store_agent_id(agent.id, config.agent_id_file)
 
     return agent

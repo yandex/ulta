@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from datetime import datetime
 from dataclasses import dataclass
-from ulta.common.cancellation import Cancellation
+from ulta.common.cancellation import Cancellation, CancellationRequest, CancellationType
 from ulta.common.logging import get_logger
 from ulta.common.utils import now
 import logging
@@ -79,26 +79,74 @@ class GenericObserver:
         self,
         *,
         stage: str,
-        critical: bool,
-        exceptions: type[Exception] | tuple[type[Exception], ...] | None = None,
-        suppress: bool = True,
+        suppress: type[Exception] | tuple[type[Exception], ...] | None = None,
+        error: type[Exception] | tuple[type[Exception], ...] | None = None,
+        critical: type[Exception] | tuple[type[Exception], ...] | None = None,
     ):
-        exceptions = exceptions or Exception
+        '''
+        Context manager for exception handling with logging and state propagation.
+
+        This helper provides context for exceptions and generic exception handling as follow
+
+        All exceptions occurring within the context are logged.
+        CancellationRequest exception is always raised
+
+        If error matches `suppress` errors, it will not raise;
+        If error matches `critical` errors, it will trigger cancellation.notify;
+        If error matches `error` errors, it will be stored into state object;
+
+        Prefer using observe(suppress=Exception) over `contextlib.suppress(Exception)` to properly handle CancellationRequest
+
+        Example:
+            >>> with self.observe(stage="processing", suppress=Exception, error=IOError):
+            ...     # Suppress all exceptions and. Submit IOError to state object.
+            ...     pass
+
+            >>> with self.observe(stage="wait_for_task", critical=Unavailable, suppress=(TooManyRequests, ResourceExhausted)):
+            ...     # Unavailable errors trigger cancellation request and graceful shutdown, ignore TooManyRequests and ResourceExhausted error
+            ...     # all other errors should raise
+            ...     pass
+        '''
+
+        noncritical_exceptions = GenericObserver._arg_to_type_tuple(suppress)
+        error_exceptions = GenericObserver._arg_to_type_tuple(error)
+        critical_exceptions = GenericObserver._arg_to_type_tuple(critical)
+
         try:
+            self._state.cleanup(stage)
+            self._cancellation.raise_on_set(CancellationType.FORCED)
             with self._state.enter_state(stage):
                 yield
-        except exceptions as e:
+        except CancellationRequest:
+            self._logger.warning('Terminating stage "%s" due to cancellation request.', stage)
+            raise
+        except Exception as e:
             msg = f'The error occured at "{stage}": {str(e)}'
-            if critical:
-                self._logger.error('The critical error occured: %s. Notifying service termination...', msg)
-                self._cancellation.notify(msg)
-            else:
-                self._logger.info('Noncritical error: %s.', msg)
-            self._state.error(stage, msg)
 
-            if suppress:
-                return True
-            else:
-                raise
-        else:
-            self._state.cleanup(stage)
+            is_crit = isinstance(e, critical_exceptions)
+            is_suppress = isinstance(e, noncritical_exceptions)
+
+            if isinstance(e, error_exceptions):
+                self._state.error(stage, msg)
+
+            if is_crit:
+                self._cancellation.notify(msg)
+                self._logger.error('The critical error occured: %s. Notifying service termination...', msg)
+                if is_suppress:
+                    return
+
+            if is_suppress:
+                self._logger.info('Noncritical error occured at "%s": %s.', stage, str(e))
+                return
+
+            self._logger.error(msg)
+            raise
+
+    def _arg_to_type_tuple(arg: type[Exception] | tuple[type[Exception], ...] | None) -> tuple[type[Exception], ...]:
+        if arg is None:
+            return tuple()
+        if isinstance(arg, tuple):
+            return arg
+        if isinstance(arg, (list, set)):
+            return tuple(arg)
+        return (arg,)

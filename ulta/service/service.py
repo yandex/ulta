@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Iterable
 
 from google.api_core.exceptions import (
+    Aborted,
     ClientError,
     FailedPrecondition,
+    Unauthenticated,
+    PermissionDenied,
     InternalServerError,
     NotFound,
 )
@@ -205,7 +208,9 @@ class UltaService:
     def wait_for_a_job(self) -> Job:
         while True:
             self.cancellation.raise_on_set()
-            with self._observer.observe(stage='request new test from backend', critical=False, suppress=False):
+            with self._observer.observe(
+                stage='request new test from backend', critical=(Unauthenticated, PermissionDenied)
+            ):
                 if job := self.get_job():
                     return job
             time.sleep(self.job_pooling_delay)
@@ -268,12 +273,12 @@ class UltaService:
 
     def serve(self):
         try:
-            with self._observer.observe(stage='service alive', critical=True, suppress=False):
-                while not self.cancellation.is_set():
-                    with self.sustain_service():
-                        job = self.wait_for_a_job()
-                        job = self._serve_job(job)
-                    time.sleep(self.sleep_time)
+            self.logger.info('Ulta service loop started')
+            while not self.cancellation.is_set():
+                with self.sustain_service():
+                    job = self.wait_for_a_job()
+                    job = self._serve_job(job)
+                time.sleep(self.sleep_time)
         finally:
             self.logger.warning('Ulta agent is stopped')
 
@@ -376,10 +381,8 @@ class UltaService:
             self._override_status = None
 
     def sustain_job(self, job_id: str):
-        exceptions = (*LOADTESTING_UNAVAILABLE_ERRORS, InternalServerError)
-        return self._observer.observe(
-            stage=f'execute test {job_id}', critical=False, exceptions=exceptions, suppress=True
-        )
+        exceptions = (*LOADTESTING_UNAVAILABLE_ERRORS, InternalServerError, Aborted)
+        return self._observer.observe(stage=f'execute test {job_id}', suppress=exceptions)
 
     @contextmanager
     def sustain_service(self):
@@ -389,7 +392,6 @@ class UltaService:
             self.logger.info('Terminating service...')
         except Exception:
             self.logger.exception('Unhandled exception occured. Abandoning pending job...')
-            return True
 
     @contextmanager
     def prevent_job_execution(self, blocking: bool = False):

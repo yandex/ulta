@@ -1,10 +1,9 @@
 from google.api_core.exceptions import (
-    ServiceUnavailable,
-    GatewayTimeout,
+    ServerError,
     TooManyRequests,
 )
 
-LOADTESTING_UNAVAILABLE_ERRORS = (ServiceUnavailable, GatewayTimeout, TooManyRequests)
+LOADTESTING_UNAVAILABLE_ERRORS = (ServerError, TooManyRequests)
 
 
 class CompositeException(Exception):
