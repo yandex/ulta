@@ -16,7 +16,7 @@ RUN /bootstrap/setup-deps.sh --features ${FEATURES}
 ADD . /bootstrap/ulta
 
 RUN /bootstrap/ulta/build_files/install-with-venv.sh \
-    /bootstrap/ulta
+    --build-constraint /bootstrap/ulta/build_constraints.txt /bootstrap/ulta
 
 RUN rm -rf /bootstrap
 
