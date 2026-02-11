@@ -19,8 +19,8 @@ fi
     # setuptools cap 71.0.0: https://github.com/pypa/setuptools/issues/4483
     python3 -m ensurepip --upgrade && python3 -m pip install --upgrade \
         "pip" \
-        "setuptools>=51.0.0,<71.0.0" \
-        "$@"
+        "setuptools>=51.0.0,<71.0.0"
+    python3 -m pip install "$@"
 )
 
 touch "$EXECUTABLE" && chmod 755 "$EXECUTABLE"
