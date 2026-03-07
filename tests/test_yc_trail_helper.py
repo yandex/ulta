@@ -1,7 +1,6 @@
 import ulta.yc.trail_helper as trail_helper
 from yandex.cloud.loadtesting.agent.v1 import monitoring_service_pb2, trail_service_pb2
 
-
 SAMPLE_MONITORING_METRICS = {
     'Memory_buff': 1026465792,
     'custom:mem_commit_limit': 33079422976,

@@ -25,7 +25,6 @@ from ulta.service.data_uploader import DataPipePlugin, TrailReportHandler, Monit
 from ulta.service.imbalance_detector import ImbalanceUploader, ImbalanceDetectorPlugin
 from ulta.service.interfaces import JobFinalizer
 
-
 INTERNAL_ERROR_TYPE = 'internal'
 AUTOSTOP_EXIT_CODES = [
     value

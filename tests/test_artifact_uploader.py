@@ -8,7 +8,6 @@ from ulta.common.exceptions import ArtifactUploadError
 from ulta.common.job import Job, ArtifactSettings
 from ulta.service.artifact_uploader import _relative_to, ROOT_SEGMENT, S3ArtifactUploader, ArtifactCollector
 
-
 TEST_FOLDER_PATH = 'test_artifact/test_folder/'
 OTHER_FOLDER_PATH = 'test_artifact/other_folder/'
 ALL_TEST_FOLDER_PATHS = {

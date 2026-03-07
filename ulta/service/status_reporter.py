@@ -59,14 +59,12 @@ class StatusReporter:
         try:
             if isinstance(e, (FailedPrecondition, NotFound, Unauthorized, Unauthenticated)):
                 self.logger.error("Backend doesn't recognize this agent. Performing shutdown.", exc_info=e)
-                self.logger.error(
-                    '''
+                self.logger.error('''
     Backend denied this agent.
     It is possible that agent was deleted from backend, or new agent with same name registered.
     If this error keeps repeating - try to delete agentid file, or run agent with
     `ulta --no-cache` or `LOADTESTING_NO_CACHE=1 ulta`
-    '''
-                )
+    ''')
                 self.cancellation.notify(
                     "The backend doesn't know this agent: agent has been deleted or account is missing loadtesting.generatorClient role.",
                     CancellationType.FORCED,
