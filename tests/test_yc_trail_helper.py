@@ -9,6 +9,7 @@ SAMPLE_MONITORING_METRICS = {
     'custom:cpu-cpu4_usage_system': 0.9999999999308784,
     'custom:mem_high_free': 0,
     'custom:network_message': 'connection ok',
+    'othername': 200,
 }
 SAMPLE_MONITORING_DATA = [
     {
@@ -73,6 +74,11 @@ def test_json_metric_to_proto_message():
             metric_type='network',
             metric_name='message',
             metric_value=0,
+        ),
+        monitoring_service_pb2.Metric(
+            metric_type='othername',
+            metric_name='metric',
+            metric_value=200,
         ),
     ]
 

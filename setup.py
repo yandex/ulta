@@ -1,7 +1,6 @@
 from setuptools import setup, find_namespace_packages
 from ulta.version import VERSION
 
-
 setup(
     package_dir={'': '.'},
     name='ulta',
