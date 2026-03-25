@@ -1,4 +1,5 @@
 from collections import defaultdict
+import logging
 
 
 def _value_to_float_safe(value):
@@ -75,24 +76,33 @@ def _json_metric_to_proto_message(proto_contract, json_metrics):
     for metric in json_metrics:
         if not metric:
             continue
+
+        metric_name_candidate = metric
         # handle telegraf metric like 'custom:cpu-cpu0_idle_time', using 'cpu-cpu0' as metric type, 'idle_time' as metric_name
-        parts = metric.split(':')[-1].split('_')
-        if len(parts) == 1:
-            result.append(
-                proto_contract.Metric(
-                    metric_type=metric,
-                    metric_name='metric',
-                    metric_value=_value_to_float_safe(json_metrics[metric]),
-                )
+        if metric_name_candidate.startswith('custom:'):
+            metric_name_candidate = metric_name_candidate[7:]
+
+        parts = metric_name_candidate.split('_')
+        metric_type = parts[0]
+        metric_name = '_'.join(parts[1:])
+
+        if not metric_name and not metric_type:
+            logging.warning('got invalid metric name "%s", skipping...', metric)
+            continue
+
+        if not metric_name:
+            metric_name = metric_type
+            metric_type = 'unknown'
+        elif not metric_type:
+            metric_type = 'unknown'
+
+        result.append(
+            proto_contract.Metric(
+                metric_type=metric_type,
+                metric_name=metric_name,
+                metric_value=_value_to_float_safe(json_metrics[metric]),
             )
-        else:
-            result.append(
-                proto_contract.Metric(
-                    metric_type=parts[0],
-                    metric_name='_'.join(parts[1:]),
-                    metric_value=_value_to_float_safe(json_metrics[metric]),
-                )
-            )
+        )
     return result
 
 

@@ -10,6 +10,7 @@ SAMPLE_MONITORING_METRICS = {
     'custom:mem_high_free': 0,
     'custom:network_message': 'connection ok',
     'othername': 200,
+    'custom:Summary_': 132,
 }
 SAMPLE_MONITORING_DATA = [
     {
@@ -76,9 +77,14 @@ def test_json_metric_to_proto_message():
             metric_value=0,
         ),
         monitoring_service_pb2.Metric(
-            metric_type='othername',
-            metric_name='metric',
+            metric_type='unknown',
+            metric_name='othername',
             metric_value=200,
+        ),
+        monitoring_service_pb2.Metric(
+            metric_type='unknown',
+            metric_name='Summary',
+            metric_value=132,
         ),
     ]
 
