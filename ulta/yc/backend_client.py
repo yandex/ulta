@@ -54,11 +54,14 @@ class YCLoadtestingClient:
 
     @catch_exceptions
     @retry_lt_client_call
-    def claim_job_status(self, job_id, job_status, error='', error_type=None):
+    def claim_job_status(self, job_id, job_status, error='', error_type=None, status_changed_at=None):
         request = job_service_pb2.ClaimJobStatusRequest(job_id=job_id, status=job_status, error=error)
         metadata = []
         if error_type is not None:
             metadata.append(('error-type', error_type))
+        if status_changed_at is not None:
+            # момент фиксации статуса на агенте: сервер по нему считает задержку доставки
+            metadata.append(('status-changed-at', repr(float(status_changed_at))))
         result = self.stub_job.ClaimStatus(request, timeout=self.timeout, metadata=self._request_metadata(metadata))
         return result.code
 

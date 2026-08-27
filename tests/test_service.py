@@ -33,7 +33,7 @@ from ulta.common.exceptions import (
     JobStoppedError,
     JobNotExecutedError,
 )
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 from ulta.yc.s3_client import YCS3Client
 from yandextank.common.util import Status as TankJobStatus
@@ -356,7 +356,8 @@ def test_serve_job(
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
     ulta_service.serve_lt_job(job)
-    patch_loadtesting_client_claim_job_status.assert_called_with('123', job_status, None, None)
+    # ANY — момент фиксации статуса на агенте, он динамический
+    patch_loadtesting_client_claim_job_status.assert_called_with('123', job_status, None, None, ANY)
 
 
 @pytest.mark.usefixtures(
@@ -409,7 +410,7 @@ def test_claim_job_status_on_errors(
     job = Job(id='123', config={'plugin': {'enabled': True}}, tank_job_id='123')
     patch_tank_client_prepare_job.return_value = job
     job_got = ulta_service._execute_job(job)
-    patch_loadtesting_client_claim_job_status.assert_called_with('123', *expected_status_args)
+    patch_loadtesting_client_claim_job_status.assert_called_with('123', *expected_status_args, ANY)
     patch_tank_client_stop_job.assert_called()
     assert job_got.status.exit_code == expected_exit_code
 
@@ -521,7 +522,7 @@ def test_serve_job_sustain_prepare_job_error(
     ulta_service._execute_job(job)
 
     patch_loadtesting_client_claim_job_status.assert_called_with(
-        '123', AdditionalJobStatus.FAILED, 'Could not run job: ', 'internal'
+        '123', AdditionalJobStatus.FAILED, 'Could not run job: ', 'internal', ANY
     )
     patch_tank_client_stop_job.assert_called()
 

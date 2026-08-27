@@ -130,10 +130,14 @@ class UltaService:
             )
 
     def claim_job_status(self, job: Job, status: JobStatus):
+        # момент фиксации события на агенте — по нему сервер считает задержку доставки статуса
+        status_changed_at = time.time()
         job.update_status(status)
         if status.status in FINISHED_STATUSES_TO_EXIT_CODE_MAPPING:
             self._report_job_finish_event(job, status)
-        self.loadtesting_client.claim_job_status(job.id, status.status, status.error, status.error_type)
+        self.loadtesting_client.claim_job_status(
+            job.id, status.status, status.error, status.error_type, status_changed_at
+        )
 
     def claim_job_failed(self, job: Job, error, error_type=None):
         return self.claim_job_status(

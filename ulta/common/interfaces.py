@@ -35,7 +35,7 @@ class JobFetcherClient(Protocol):
 
 
 class JobStatusClient(Protocol):
-    def claim_job_status(self, job_id, job_status, error='', error_type=None) -> None: ...
+    def claim_job_status(self, job_id, job_status, error='', error_type=None, status_changed_at=None) -> None: ...
 
 
 class JobControlClient(Protocol):
