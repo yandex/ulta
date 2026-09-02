@@ -133,6 +133,8 @@ install_jmeter() {
     tar zxvf ${TMPDIR}/apache-jmeter.tgz -C /usr/local/lib/ || log_fatal "Can't extract jmeter"
 
     JMETER_HOME="/usr/local/lib/apache-jmeter-${JMETER_VERSION}"
+    # ABCADVISOR-68068: CVE-2025-66516 в tika-core 1.28.5, jar нужен только GUI Document parsing
+    rm -f ${JMETER_HOME}/lib/tika-*.jar
     ln -s ${JMETER_HOME}/bin/jmeter /usr/local/bin/jmeter
 
     echo "JVM_MAX_MEMORY=\$(free -bwl | awk '/Mem:/ { printf \"%d\", \$2 / 10 * 9}')" >${JMETER_HOME}/bin/setenv.sh
