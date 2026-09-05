@@ -5,11 +5,17 @@ from unittest.mock import patch, MagicMock
 from google.protobuf.any_pb2 import Any
 
 from ulta.common.agent import AgentInfo
+from ulta.common.cancellation import Cancellation
+from ulta.common.config import UltaConfig
+from ulta.common.state import State, GenericObserver
 from ulta.service.loadtesting_agent_service import (
     _identify_agent_id,
+    register_loadtesting_agent,
+    UNRECOVERABLE_REGISTRATION_DELAY,
     AgentOrigin,
     AgentOriginError,
 )
+import grpc
 from ulta.yc.agent_client import (
     agent_registration_service_pb2,
     YCAgentClient,
@@ -126,3 +132,29 @@ def test_agent_state(name, folder_id, is_anonymous, is_persistent):
     assert agent.is_external() is True
     assert agent.is_anonymous_external_agent() == is_anonymous
     assert agent.is_persistent_external_agent() == is_persistent
+
+
+class _Denied(grpc.RpcError):
+    def code(self):
+        return grpc.StatusCode.PERMISSION_DENIED
+
+
+def test_registration_denied_sleeps_before_exit():
+    """Отказ по правам не должен превращаться в краш-луп: перед падением ждём (LOAD-3561)."""
+    config = MagicMock(spec=UltaConfig)
+    config.no_cache = True
+    config.agent_id_file = None
+    config.agent_name = 'persistent'
+    config.folder_id = 'folder_id'
+    config.instance_lt_created = False
+    config.agent_version = '1.0'
+
+    agent_client = MagicMock()
+    agent_client.register_external_agent.side_effect = _Denied()
+    observer = GenericObserver(State(), logging.getLogger(), Cancellation())
+
+    with patch('time.sleep') as sleep:
+        with pytest.raises(grpc.RpcError):
+            register_loadtesting_agent(config, agent_client, observer, logging.getLogger())
+
+    sleep.assert_called_once_with(UNRECOVERABLE_REGISTRATION_DELAY)

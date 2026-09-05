@@ -1,4 +1,6 @@
+import grpc
 import logging
+import time
 
 from pathlib import Path
 from ulta.common.agent import AgentInfo, AgentOrigin
@@ -8,6 +10,12 @@ from ulta.common.interfaces import AgentClient
 from ulta.common.state import GenericObserver
 
 ANONYMOUS_AGENT_ID = None
+
+# Отказ по правам ретраем не лечится: пока роль не выдана, регистрация не пройдёт никогда.
+# Падаем, как и раньше, но с паузой — иначе супервизор поднимает процесс через пару секунд,
+# и один неверно настроенный агент годами долбит бэкенд по 13 запросов в минуту (LOAD-3561).
+UNRECOVERABLE_REGISTRATION_CODES = (grpc.StatusCode.PERMISSION_DENIED, grpc.StatusCode.UNAUTHENTICATED)
+UNRECOVERABLE_REGISTRATION_DELAY = 60
 
 
 class AgentOriginError(Exception):
@@ -25,8 +33,19 @@ def register_loadtesting_agent(
         with observer.observe(stage='load cached agent id from file', suppress=Exception):
             agent.id = try_read_agent_id(config.agent_id_file, logger)
 
-    with observer.observe(stage='register agent in service', critical=Exception):
-        agent.id = agent.id or _identify_agent_id(agent, agent_client, logger)
+    try:
+        with observer.observe(stage='register agent in service', critical=Exception):
+            agent.id = agent.id or _identify_agent_id(agent, agent_client, logger)
+    except grpc.RpcError as e:
+        if e.code() in UNRECOVERABLE_REGISTRATION_CODES:
+            logger.error(
+                'Agent registration rejected with %s: it will not succeed until access is granted. '
+                'Sleeping %ss before exit to avoid hammering the backend.',
+                e.code(),
+                UNRECOVERABLE_REGISTRATION_DELAY,
+            )
+            time.sleep(UNRECOVERABLE_REGISTRATION_DELAY)
+        raise
 
     if not config.no_cache and config.agent_id_file and agent.is_persistent_external_agent() and agent.id:
         with observer.observe(stage='cache agent id to file', suppress=Exception):
