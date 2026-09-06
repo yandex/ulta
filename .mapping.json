@@ -36,6 +36,7 @@
   "tests/test_job_status.py":"load/projects/ulta/tests/test_job_status.py",
   "tests/test_loadtesting_agent.py":"load/projects/ulta/tests/test_loadtesting_agent.py",
   "tests/test_log_reporter.py":"load/projects/ulta/tests/test_log_reporter.py",
+  "tests/test_s3_client.py":"load/projects/ulta/tests/test_s3_client.py",
   "tests/test_service.py":"load/projects/ulta/tests/test_service.py",
   "tests/test_service_api.py":"load/projects/ulta/tests/test_service_api.py",
   "tests/test_startup.py":"load/projects/ulta/tests/test_startup.py",

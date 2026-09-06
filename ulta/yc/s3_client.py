@@ -74,6 +74,7 @@ class Boto3S3Client(S3Client):
 
     def download(self, storage_object, path_to_download):
         client = self.connect(threading.get_ident())
+        os.makedirs(os.path.dirname(path_to_download), exist_ok=True)
         client.download_file(
             storage_object.object_storage_bucket, storage_object.object_storage_filename, path_to_download
         )
