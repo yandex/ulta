@@ -19,7 +19,7 @@ from ulta.common.file_system import (
 )
 from ulta.common.cancellation import Cancellation
 from ulta.common.state import State
-from yandextank.contrib.netort.netort.resource import ResourceManager, ResourceManagerConfig
+from load.contrib.netort.resource import ResourceManager, ResourceManagerConfig
 
 MB = 2**20
 GB = 2**30

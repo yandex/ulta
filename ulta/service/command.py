@@ -25,7 +25,7 @@ from ulta.common.state import State, GenericObserver
 from ulta.common.utils import str_to_loglevel
 from ulta.service.status_reporter import StatusReporter, DummyStatusReporter
 from ulta.service.tank_client import TankClient, TankVariables
-from yandextank.contrib.netort.netort.resource import ResourceManager, make_resource_manager
+from load.contrib.netort.resource import ResourceManager, make_resource_manager
 
 MIN_SLEEP_TIME = 1
 

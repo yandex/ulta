@@ -11,8 +11,8 @@ from ulta.common.config import UltaConfig
 from ulta.common.healthcheck import HealthCheckProtocol
 from ulta.common.state import State, GenericObserver
 from ulta.common.job import Job, JobPluginType
-from yandextank.contrib.netort.netort import process
-from yandextank.contrib.netort.netort.resource import ResourceManager
+from load.contrib.netort import process
+from load.contrib.netort.resource import ResourceManager
 
 
 @dataclass

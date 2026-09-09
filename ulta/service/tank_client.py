@@ -10,7 +10,7 @@ from typing import Iterable, Protocol, Callable
 
 from yandextank.common.interfaces import AbstractCriterion
 from yandextank.common.util import Status
-from yandextank.contrib.netort.netort.resource import ResourceManager
+from load.contrib.netort.resource import ResourceManager
 from yandextank.core.tankcore import LockError, Lock
 from yandextank.core.tankworker import TankWorker
 from yandextank.validator.validator import ValidationError
